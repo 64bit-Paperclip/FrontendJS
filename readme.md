@@ -1,9 +1,11 @@
 
 # Frontend.js
 
-Frontend.js is a tiny, dependency-free framework for building pages from `<fragment>` elements with lightweight state and data binding.
+Frontend.js is a tiny, dependency-free framework for composing web pages from reusable HTML fragments.
 
-It provides a way to compose static or dynamic HTML pages using reusable fragments, parameter substitution, and simple reactive data without relying on large front-end frameworks or build systems.
+It uses the <fragment> element with a src attribute to include external pieces of markup directly in your page, letting you assemble complete layouts from modular parts without any build step or framework overhead. Each fragment remains a valid, standalone HTML file — making your site natively composable, inspectable, and portable.
+
+Alongside composition, Frontend.js provides a minimal state and data layer for simple reactive behavior. Changes to data emit clear, structured events that update bound elements or trigger custom logic, allowing dynamic pages and live UI updates without hidden watchers or virtual DOMs.
 
 ---
 
@@ -119,7 +121,7 @@ You can inspect the network requests for fragments, read the substituted HTML, a
 This level of transparency helps developers trust what the framework is doing and modify it safely.
 
 
-### 1.4 Zero Ceremony | Compose, Don’t Compile
+### 1.4. Zero Ceremony | Compose, Don’t Compile
 
 Every `<fragment>` tag is a promise of composition — the ability to assemble entire pages from reusable parts.  
 Because fragments load natively in the browser, there are no bundlers, imports, or dependency graphs to manage.

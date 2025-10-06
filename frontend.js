@@ -169,6 +169,7 @@ const Frontend = (() => {
         let loadedCount = 0;
 
         for (const frag of fragments) {
+
             const fragId = frag.id || null;
             const src = frag.getAttribute("src");
             const condition = frag.getAttribute("condition");
