@@ -1,7 +1,7 @@
 
 # Frontend.js
 
-Frontend.js is a tiny, dependency-free framework for composing web pages from reusable HTML fragments.
+Frontend.js is a tiny, dependency-free framework for composing web pages from reusable HTML fragments and creating reactive data driven pages.
 
 It uses the <fragment> element with a src attribute to include external pieces of markup directly in your page, letting you assemble complete layouts from modular parts without any build step or framework overhead. Each fragment remains a valid, standalone HTML file — making your site natively composable, inspectable, and portable.
 
