@@ -1305,7 +1305,7 @@ async function loadFragments(root) {
             const entries = Array.isArray(value) ? value.entries() : Object.entries(value);
 
             for (const [key, child] of entries) {
-                dispatchDataEvent("added", `${path}.${key}`, value, undefined);
+                dispatchDataEvent("added", `${path}.${key}`, child, undefined);
 
             }
         }
