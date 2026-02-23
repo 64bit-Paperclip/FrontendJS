@@ -13,7 +13,7 @@ A tiny, dependency-free framework for composing pages from HTML fragments with l
 ## Quick start
 
 ```html
-<script src="frontend.js"></script>
+<script src="/js/frontend.js"></script>
 
 <fragment src="nav.html"></fragment>
 <fragment src="main.html" param-theme="dark"></fragment>
