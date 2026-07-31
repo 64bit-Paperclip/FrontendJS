@@ -213,12 +213,22 @@ const Frontend = (() => {
                 dispatch("fragment:loaded", { id: currentFrag.id, src: targetSrc, nodes: newNodes });
                 loadedCount++;
 
-                // --- Nested fragments ---
-                for (const n of newNodes)
-                {
-                    if (n.nodeType === Node.ELEMENT_NODE && n.tagName.toLowerCase() === "fragment")
-                    {
+                // --- Nested fragments (traverse the full subtree, any depth) ---
+                for (const n of newNodes) {
+                    if (n.nodeType !== Node.ELEMENT_NODE) continue;
+
+                    // The node itself may be a fragment...
+                    if (n.matches("fragment[src]")) {
                         loadedCount += await loadFragment(n);
+                        continue;
+                    }
+
+                    // ...otherwise load any fragments nested anywhere inside it.
+                    if (n.querySelectorAll) {
+                        for (const f of n.querySelectorAll("fragment[src]")) {
+                            if (!f.isConnected || f.closest("code")) continue;
+                            loadedCount += await loadFragment(f);
+                        }
                     }
                 }
 
