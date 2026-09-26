@@ -104,48 +104,72 @@ const Frontend = (() => {
     }
 
 
-
-    /**
-     * Loads code blocks (<code src="...">) and applies Highlight.js.
+    /********************************************************************************
+     * Loads code blocks (<code src="...">) and applies Highlight.js if available.
      * Safe to call multiple times; uses data-loaded flag to avoid duplicates.
-     */
+     ********************************************************************************/
     async function loadCodeElements(root = document) {
 
-        if (typeof hljs === "undefined")
-            return; // Highlight.js not loaded
+        const canHighlight = typeof hljs !== "undefined";
 
         const codeBlocks = root.querySelectorAll('code[src]:not([data-loaded])');
+        const inlineBlocks = root.querySelectorAll("code:not([src]):not([data-loaded])");
+
+        const highlight = el => {
+            const lang = el.getAttribute("language");
+
+            if (lang) {
+                const existing = (el.className.match(/\blanguage-([\w-]+)/) || [])[1];
+
+                if (!existing) {
+                    el.classList.add(`language-${lang}`);
+                } else if (existing !== lang) {
+                    console.warn(`[Frontend] <code> has class "language-${existing}" and language="${lang}"; using "${existing}"`, el);
+                }
+            }
+
+            hljs.highlightElement(el);
+        };
 
         for (const el of codeBlocks) {
             const src = el.getAttribute("src");
-            const lang =
-                (el.className.match(/language-(\w+)/) || [])[1] ||
-                el.getAttribute("language") ||
-                "plaintext";
+
+            // already processed, skip it.
+            if (el.dataset.loaded) { continue; }
+
+            if (!src) {
+                console.error(`[Frontend] Failed to load code block. Empty src attribute.`);
+                el.dataset.loaded = "error";
+                continue;
+            }
+
+            
 
             try {
                 const res = await fetch(src);
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const codeText = await res.text();
-
-                el.textContent = codeText;
+                el.textContent = await res.text();
                 el.dataset.loaded = "true";
-
-                // run highlighter
-                hljs.highlightElement(el);
             } catch (err) {
                 console.error(`[Frontend] Failed to load code block from ${src}:`, err);
                 el.textContent = `/* Error loading ${src} */`;
+                el.dataset.loaded = "error";
+                continue;
             }
+
+            if (!canHighlight)
+                continue;
+
+            highlight(el);
         }
 
-        // Also highlight any inline code tags without src
-        const inlineBlocks = root.querySelectorAll("code:not([data-loaded])");
-        inlineBlocks.forEach(el => {
-
-            hljs.highlightElement(el);
-            el.dataset.loaded = "true";
-        });
+        if (canHighlight)
+        {
+            inlineBlocks.forEach(el => {
+                el.dataset.loaded = "true";
+                highlight(el);
+            });
+        }
     }
 
 
@@ -164,6 +188,11 @@ const Frontend = (() => {
 
     async function loadFragment(element) {
         let loadedCount = 0;
+
+        // Skip fragments detached when an earlier fragment replaced their parent
+        if (!element.isConnected)
+            return 0;
+
         const currentFrag = getFragmentData(element);
 
         try {
@@ -758,24 +787,17 @@ const Frontend = (() => {
             // For example: <trigger on="click" do="..." condition="...">
             // → <div on-click="..." data-trigger-condition="...">
             const baseName = `on-${t.on}`;
-
-            // Set primary action attribute
-            if (t.action) {
-                parent.setAttribute(baseName, t.action);
-            }
-
-            // Optional target/from scoping
-            if (t.key) {
-                parent.setAttribute(`${baseName}-key`, t.key);
-            }
-            if (t.target) {
-                parent.setAttribute(`${baseName}-target`, t.target);
-            }
+            
+            if (t.action) { parent.setAttribute(baseName, t.action); }          // Set primary action attribute
+            if (t.key) { parent.setAttribute(`${baseName}-key`, t.key); }       // Optional target/from scoping
+            if (t.target) { parent.setAttribute(`${baseName}-target`, t.target); }
+            if (t.condition) parent.setAttributeNS(`${baseName}-condition`, t.condition);
 
             // Boolean flags
             if (t.once) parent.setAttribute(`${baseName}-once`, "");
             if (t.prevent) parent.setAttribute(`${baseName}-prevent`, "");
             if (t.stop) parent.setAttribute(`${baseName}-stop`, "");
+
 
             // Remove the trigger element after compilation
             trigEl.remove();
@@ -1322,7 +1344,7 @@ const Frontend = (() => {
             const here = keys.slice(0, i + 1).join(".");
 
             if (!(k in obj)) {
-                console.error(`[Frontend] Cannot set "${path}": "${keys.slice(0, i + 1).join('.')}" does not exist`);
+                console.error(`[Frontend] Cannot set "${path}": "${here}" does not exist`);
                 return;
             }
 
@@ -1331,7 +1353,7 @@ const Frontend = (() => {
             // Can't descend into a primitive or null
             if (obj === null || typeof obj !== "object") {
                 const kind = obj === null ? "null" : typeof obj;
-                console.error(`[Frontend] Cannot set "${path}": "${keys.slice(0, i + 1).join('.')}" is ${kind}, not an object`);
+                console.error(`[Frontend] Cannot set "${path}": "${here}" is ${kind}, not an object`);
                 return;
             }
         }
@@ -1370,8 +1392,6 @@ const Frontend = (() => {
 
             }
         }
-
-
     }
 
 
@@ -1447,8 +1467,6 @@ const Frontend = (() => {
 
         const selector = `[on-data-${type}-key="${path}"]`;
         const elements = document.querySelectorAll(selector);
-
-
         for (const el of elements) {
             const handler = el.getAttribute(`on-data-${type}`);
             if (!handler)
