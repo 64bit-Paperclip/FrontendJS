@@ -11,7 +11,8 @@ const Frontend = (() => {
     async function initialize() {
 
 
-        if (!Frontend._behaviors) Frontend._behaviors = new Map();
+        if (!Frontend._behaviors)
+            Frontend._behaviors = new Map();
 
         await loadBehaviorLinks(document);
         await loadBehaviorsElements(document);
@@ -39,10 +40,11 @@ const Frontend = (() => {
         const inlineBehaviors = Array.from(root.querySelectorAll('behavior[id]'));
 
         if (!Frontend._behaviors) Frontend._behaviors = new Map();
+
         // --- Register inline <behavior> definitions ---
-        for (const bEl of inlineBehaviors) {
+        for (const bEl of inlineBehaviors)
+            {
             registerBehaviorElement(bEl, "inline");
-            // Optional cleanup: remove from DOM so it doesn’t clutter visual output
             bEl.remove();
         }
     }
@@ -52,6 +54,7 @@ const Frontend = (() => {
 
 
         const links = Array.from(root.querySelectorAll('link[type="behaviors"][src]'));
+
         // --- Load external behavior packs ---
         for (const link of links) {
 
@@ -61,23 +64,29 @@ const Frontend = (() => {
 
             try {
 
-                // ✅ Skip if this behavior pack is already in the document head
+                // Skip if this behavior pack is already in the document head
                 const alreadyLoaded = document.querySelector(`link[type="behaviors"][src="${src}"]`);
-                if (alreadyLoaded && alreadyLoaded !== link) {
+
+                if (alreadyLoaded && alreadyLoaded !== link)
+                {
                     console.debug(`[Frontend] Skipped already-loaded behaviors from ${src}`);
                     continue;
                 }
 
                 const response = await fetch(src);
+
                 if (!response.ok)
                     throw new Error(`HTTP ${response.status}`);
 
                 const html = await response.text();
                 const wrapper = document.createElement("div");
+
                 wrapper.innerHTML = html;
 
                 const behaviorEls = Array.from(wrapper.querySelectorAll("behavior[id]"));
-                if (behaviorEls.length === 0) {
+
+                if (behaviorEls.length === 0)
+                {
                     console.warn(`[Frontend] No <behavior id="..."> found in ${src}`);
                     continue;
                 }
@@ -163,20 +172,20 @@ const Frontend = (() => {
             if (!targetSrc) {
                 // replaces frag with inner content
                 useInlineFallback(currentFrag);
-                return;
+                return loadedCount;
             }
 
             // --- Fetch HTML ---
-            const raw = await fetchFragment(currentFrag);
+            const raw = await fetchFragment(targetSrc);
             let html = raw;
             if (!raw) {
                 // replaces frag with inner content
                 useInlineFallback(currentFrag);
-                return;
+                return loadedCount;
             }
 
             // --- Determine content type ---
-            const src = currentFrag.src?.toLowerCase() || "";
+            const src = targetSrc.toLowerCase() || "";
 
             if (src.endsWith(".md") || src.endsWith(".markdown") || src.endsWith(".mkd"))
             {
@@ -233,13 +242,6 @@ const Frontend = (() => {
                 }
 
             }
-
-
-
-            
-
-            
-
         } catch (err) {
             console.error("Unexpected fragment error:", err);
             element.remove();
@@ -247,35 +249,38 @@ const Frontend = (() => {
         return loadedCount;
     }
 
-/**
- * Loads all <fragment src="..."> elements inside the given root.
- * Skips any fragments that are nested inside <code> or <pre><code> blocks.
- * Returns the number of fragments successfully loaded.
- */
-async function loadFragments(root) {
-    // Find all fragment[src] but filter out those inside <code> or <pre><code>
-    const allFragments = Array.from(root.querySelectorAll("fragment[src]")).filter(frag => {
-        // Skip if any ancestor is a <code> element
-        return !frag.closest("code");
-    });
+    /**
+     * Loads all <fragment src="..."> elements inside the given root.
+     * Skips any fragments that are nested inside <code> or <pre><code> blocks.
+     * Returns the number of fragments successfully loaded.
+     */
+    async function loadFragments(root) {
+        // Find all fragment[src] but filter out those inside <code> or <pre><code>
+        const allFragments = Array.from(root.querySelectorAll("fragment[src]")).filter(frag => {
+            // Skip if any ancestor is a <code> element
+            return !frag.closest("code");
+        });
 
-    let loadedCount = 0;
+        let loadedCount = 0;
 
-    for (const fragEl of allFragments) {
-        loadedCount += await loadFragment(fragEl);
+        for (const fragEl of allFragments) {
+            loadedCount += await loadFragment(fragEl);
+        }
+
+        return loadedCount;
     }
 
-    return loadedCount;
-}
 
+    async function loadTemplateLinks(root = document)
+    {
 
-    async function loadTemplateLinks(root = document) {
         const templateLinks = Array.from(root.querySelectorAll('link[type="templates"][src]'));
 
         // --- Load from <link type="templates" src="..."> ---
         if (templateLinks.length === 0)
             return;
 
+        const templatesRoot = getTemplatesContainer();
 
         for (const link of templateLinks) {
             const src = link.getAttribute('src');
@@ -302,7 +307,7 @@ async function loadFragments(root) {
                 }
 
                 for (const tmpl of templates) {
-                    moveTemplateToGlobal(tmpl, mainContainer);
+                    moveTemplateToGlobal(tmpl, templatesRoot);
                 }
 
 
@@ -324,13 +329,7 @@ async function loadFragments(root) {
         const allContainers = Array.from(root.querySelectorAll("templates"));
         const allTemplates = Array.from(root.querySelectorAll("template"));
 
-        // --- Find or create the global <templates id="templates"> container ---
-        let docTemplateContainer = document.querySelector("templates#templates");
-        if (!docTemplateContainer) {
-            docTemplateContainer = document.createElement("templates");
-            docTemplateContainer.id = "templates";
-            document.body.appendChild(docTemplateContainer);
-        }
+        let docTemplateContainer = getTemplatesContainer();
 
         // --- Append it to the end of <body> if not already there ---
         if (document.body.lastElementChild !== docTemplateContainer) {
@@ -840,8 +839,38 @@ async function loadFragments(root) {
         return bindings;
     }
 
-    function applyDataBindingsToElement(parent, bindings) {
-        if (!(parent instanceof Element)) {
+    /********************************************************************************
+     * 
+     * Compiles <data-binding> child elements into data-bind-* attributes
+     * on their parent element, then removes the <data-binding> elements.
+     *
+     * Each binding links a state key to a target on the parent. When that key
+     * changes via setData(), updateDataBindings() finds the attribute and
+     * applies the new value through applyDataBinding().
+     *
+     * If the key already has a value in state, it is applied immediately so
+     * the element is populated on first render rather than on the next change.
+     *
+     * Example:
+     *   <span>
+     *     <data-binding key="user.name" target="text"></data-binding>
+     *     <data-binding key="theme.color" target="style-color"></data-binding>
+     *   </span>
+     *
+     *   → <span data-bind-text="user.name" data-bind-style-color="theme.color">
+     *
+     * Supported targets (see applyDataBinding):
+     *   text, html, value, class, visible, style-<prop>, attr-<name>,
+     *   or any other name, which is set as a plain attribute.
+     *
+     * @param {Element}   parent   The element receiving the bindings.
+     * @param {Element[]} bindings Its immediate <data-binding> children.
+     * 
+     ********************************************************************************/
+    function applyDataBindingsToElement(parent, bindings)
+    {
+        if (!(parent instanceof Element))
+        {
             console.error("[Frontend] applyDataBindingsToElement() called with non-element:", parent);
             return;
         }
@@ -853,18 +882,25 @@ async function loadFragments(root) {
             const bindingKey = binding.getAttribute("key");
             const bindingTarget = binding.getAttribute("target");
 
+            // Invalid binding: warn and discard it
             if (!bindingKey || !bindingTarget) {
-                trigEl.remove();
+                console.warn("[Frontend] Ignored <data-binding> missing 'key' or 'target':", binding);
+                binding.remove();
                 continue;
             }
 
+            // Compile to an attribute that updateDataBindings() will find later
+            parent.setAttribute(`data-bind-${bindingTarget}`, bindingKey);
 
-            const baseName = `data-binding-${bindingTarget}`;
-            parent.setAttribute(baseName, bindingKey);
+            // Apply the current value immediately, if state already has one
+            const current = getData(bindingKey);
+            if (current !== undefined) applyDataBinding(parent, bindingTarget.split("-"), current);
 
             binding.remove();
         }
     }
+
+
     /**
      * Collects params from a <fragment> element.
      * - param-* attributes → { key: value }
@@ -889,9 +925,6 @@ async function loadFragments(root) {
      * Trigger Compilation Utility Functions
      * 
      ***************************************************************************************/
-
-
-
 
     /**
      * Determines which source URL to load for a fragment context.
@@ -952,17 +985,14 @@ async function loadFragments(root) {
     }
 
 
-
     /**
-     * Fetches the HTML for a fragment source URL.
-     * Falls back to inline content if the request fails.
-     * Returns null if no external or fallback content could be used.
+     * Fetches the text content at a fragment source URL.
+     * Returns null if the request fails, so the caller can use the inline fallback.
+     *
+     * @param {string} src - The resolved URL to fetch (main src or fallback).
+     * @returns {Promise<string|null>}
      */
-    async function fetchFragment(frag) {
-
-        const src = frag.src;
-        const fragEl = frag.el;
-
+    async function fetchFragment(src) {
         try {
             const response = await fetch(src);
 
@@ -978,7 +1008,6 @@ async function loadFragments(root) {
             return null;
         }
     }
-
     /**
      * Replaces a fragment element with its inline fallback content, if any.
      * Returns null (so callers can handle consistently).
@@ -1218,6 +1247,20 @@ async function loadFragments(root) {
         templatesRoot.appendChild(tmpl);
     }
 
+    /**
+     * Returns the global <templates id="templates"> container,
+     * creating it at the end of <body> if it doesn't exist yet.
+     */
+    function getTemplatesContainer() {
+        let container = document.querySelector("templates#templates");
+        if (!container) {
+            container = document.createElement("templates");
+            container.id = "templates";
+            document.body.appendChild(container);
+        }
+        return container;
+    }
+
     /***************************************************************************************
      *
      * Markdown Processor API
@@ -1276,6 +1319,7 @@ async function loadFragments(root) {
 
         for (let i = 0; i < keys.length - 1; i++) {
             const k = keys[i];
+            const here = keys.slice(0, i + 1).join(".");
 
             if (!(k in obj)) {
                 console.error(`[Frontend] Cannot set "${path}": "${keys.slice(0, i + 1).join('.')}" does not exist`);
@@ -1283,6 +1327,13 @@ async function loadFragments(root) {
             }
 
             obj = obj[k];
+
+            // Can't descend into a primitive or null
+            if (obj === null || typeof obj !== "object") {
+                const kind = obj === null ? "null" : typeof obj;
+                console.error(`[Frontend] Cannot set "${path}": "${keys.slice(0, i + 1).join('.')}" is ${kind}, not an object`);
+                return;
+            }
         }
 
         const lastKey = keys[keys.length - 1];
@@ -1327,7 +1378,8 @@ async function loadFragments(root) {
     /**
      * Retrieves a value from the global state.
      */
-    function getData(path) {
+    function getData(path)
+    {
         return path.split(".").reduce((o, k) => (o != null ? o[k] : undefined), state);
     }
 
@@ -1336,13 +1388,29 @@ async function loadFragments(root) {
      * Removes a value from the global state at a given path.
      * Fires data:removed and updates bound elements.
      */
-    function removeData(path) {
+    function removeData(path)
+    {
         const keys = path.split(".");
         let obj = state;
-        for (let i = 0; i < keys.length - 1; i++) {
+
+        for (let i = 0; i < keys.length - 1; i++)
+        {
             const k = keys[i];
-            if (!(k in obj)) return; // nothing to remove
+            const here = keys.slice(0, i + 1).join(".");
+
+            if (!(k in obj))
+            {
+                console.warn(`[Frontend] Cannot remove "${path}": "${here}" does not exist`);
+                return; // nothing to remove
+            }
+                
             obj = obj[k];
+            // Can't descend into a primitive or null
+            if (obj === null || typeof obj !== "object") {
+                const kind = obj === null ? "null" : typeof obj;
+                console.warn(`[Frontend] Cannot remove "${path}": "${here}" is ${kind}, not an object`);
+                return;
+            }
         }
 
         const lastKey = keys[keys.length - 1];
