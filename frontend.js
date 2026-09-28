@@ -4,46 +4,37 @@ const Frontend = (() => {
     let markdownProcessor = text => `<pre>${text}</pre>`; // default fallback
 
 
-    /**
+    /********************************************************************************
      * Performs one-time initialization for the Frontend runtime.
      * Loads templates, behaviors, triggers, and code elements at the document level.
-     */
+     ********************************************************************************/
     async function initialize() {
-
-
         if (!Frontend._behaviors)
             Frontend._behaviors = new Map();
 
         await loadBehaviorLinks(document);
         await loadBehaviorsElements(document);
-
         await loadTemplateLinks(document);
         await loadTemplates(document);
-
         await buildTriggers(document);
         await buildDataBindings(document);
-
         await loadCodeElements(document);
 
         const loadedCount = await loadFragments(document);
-
-
         dispatch("page:load_complete", { count: loadedCount, finishedAt: Date.now() });
-
     }
-
-
 
 
     async function loadBehaviorsElements(root = document) {
 
         const inlineBehaviors = Array.from(root.querySelectorAll('behavior[id]'));
 
-        if (!Frontend._behaviors) Frontend._behaviors = new Map();
+        if (!Frontend._behaviors)
+            Frontend._behaviors = new Map();
 
         // --- Register inline <behavior> definitions ---
         for (const bEl of inlineBehaviors)
-            {
+        {
             registerBehaviorElement(bEl, "inline");
             bEl.remove();
         }
@@ -1101,6 +1092,11 @@ const Frontend = (() => {
         const wrapper = document.createElement("div");
         wrapper.innerHTML = html;
 
+        // Removes any <script> elements from the incoming fragment which
+        // have and id, and a <script> element with that id already exists
+        // within the DOM.
+        removeDuplicateScripts(wrapper);
+
         loadBehaviorLinks(wrapper);
         loadBehaviorsElements(wrapper);
 
@@ -1205,9 +1201,35 @@ const Frontend = (() => {
         for (const { name, value } of old.attributes) {
             s.setAttribute(name, value);
         }
-        if (old.textContent) s.textContent = old.textContent;
+        if (old.textContent)
+            s.textContent = old.textContent;
+        
         old.parentNode.insertBefore(s, old);
         old.remove();
+    }
+
+    /**
+     * Removes <script id="..."> elements from a parsed fragment before it is
+     * inserted, when a script with the same id is already in the document or
+     * appears earlier in the same fragment. Scripts without an id are kept.
+     *
+     * @param {Element} wrapper - The detached element holding the parsed fragment.
+     */
+    function removeDuplicateScripts(wrapper) {
+        const seen = new Set(); // ids already kept from this fragment
+
+        for (const script of wrapper.querySelectorAll("script[id]")) {
+            const id = script.id;
+            if (!id) continue;
+
+            if (seen.has(id) || document.querySelector(`script#${CSS.escape(id)}`)) {
+                console.debug(`[Frontend] Skipped duplicate script "${id}"`);
+                script.remove();
+                continue;
+            }
+
+            seen.add(id);
+        }
     }
 
 
