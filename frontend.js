@@ -431,10 +431,10 @@ const Frontend = (() => {
         const substituted = substituteParams(html, params || {});
 
         // --- Parse substituted HTML into DOM nodes ---
-        const wrapper = document.createElement("div");
+        const wrapper = document.createElement("template");
         wrapper.innerHTML = substituted;
 
-        const newNodes = Array.from(wrapper.childNodes);
+        const newNodes = Array.from(wrapper.content.childNodes);
 
         // --- Insert into destination ---
         if (clearParent) {
@@ -663,8 +663,8 @@ const Frontend = (() => {
      */
     function buildTriggers(root = document) {
 
-        if (!(root instanceof Element) && root !== document) {
-            console.error("[Frontend] buildTriggers() called with non-element:", root);
+        if (!(root instanceof Element) && !(root instanceof DocumentFragment) && root !== document) {
+            console.error("[Frontend] buildTriggers() called with invalid root:", root);
             return;
         }
 
@@ -1089,27 +1089,20 @@ const Frontend = (() => {
      */
     function parseFragment(html, fragData) {
 
-        const wrapper = document.createElement("div");
+        const wrapper = document.createElement("template");
         wrapper.innerHTML = html;
+        const root = wrapper.content;
 
-        // Removes any <script> elements from the incoming fragment which
-        // have and id, and a <script> element with that id already exists
-        // within the DOM.
-        removeDuplicateScripts(wrapper);
+        removeDuplicateScripts(root);
+        loadBehaviorLinks(root);
+        loadBehaviorsElements(root);
+        loadTemplateLinks(root);
+        loadTemplates(root);
+        buildTriggers(root);
+        buildDataBindings(root);
+        loadCodeElements(root);         // --- Parse and Load code src attributes
 
-        loadBehaviorLinks(wrapper);
-        loadBehaviorsElements(wrapper);
-
-        loadTemplateLinks(wrapper);
-        loadTemplates(wrapper);
-
-        buildTriggers(wrapper);
-        buildDataBindings(wrapper);
-
-        // --- Parse and Load code src attributes
-        loadCodeElements(wrapper);
-
-        const newNodes = Array.from(wrapper.childNodes);
+        const newNodes = Array.from(root.childNodes);
 
         // --- swap the DOM fragment with the new nodes
         fragData.el.replaceWith(...newNodes);
