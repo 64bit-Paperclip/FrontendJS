@@ -24,6 +24,143 @@ const Frontend = (() => {
         dispatch("page:load_complete", { count: loadedCount, finishedAt: Date.now() });
     }
 
+    
+    /**
+     * Console logging with a "[Frontend]" prefix on every message.
+     * Usage: log.warn("Something happened:", value);
+     */
+    const log = Object.fromEntries(
+        ["debug", "info", "log", "warn", "error"].map(level =>
+            [level, (...args) => console[level]("[Frontend]", ...args)]
+        )
+    );
+
+
+    /**
+     * Fetches a URL and returns the response body as text.
+     * Throws on network failure or a non-OK HTTP status, so callers can
+     * handle every failure in a single catch.
+     *
+     * @param {string} src - The URL to fetch.
+     * @returns {Promise<string>} The response body.
+     */
+    async function fetchText(src) {
+        const res = await fetch(src);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.text();
+    }
+
+
+    /**
+     * Parses an HTML string into a detached DocumentFragment.
+     * Uses a <template> element so content is parsed without a surrounding
+     * context: table rows, cells, list items, and options are all preserved,
+     * where a <div> wrapper would drop table parts. Nothing is rendered,
+     * loaded, or executed until the nodes are inserted into the page.
+     *
+     * @param {string} html - The HTML to parse.
+     * @returns {DocumentFragment} The parsed nodes.
+     */
+    function parseHTML(html) {
+        const t = document.createElement("template");
+        t.innerHTML = html;
+        return t.content;
+    }
+
+
+    /********************************************************************************
+     * Loads external "packs" of elements declared with <link type="..." src="...">.
+     *
+     * A pack is an HTML file containing one or more elements of a given kind
+     * (e.g. <behavior id="..."> or <template id="...">). For each matching link
+     * under `root`, this fetches the file, parses it, finds every element matching
+     * `selector`, and passes each one to `register`.
+     *
+     * Duplicate packs are skipped: if the document already contains a different
+     * <link> with the same type and src, this link is ignored. When a fragment
+     * includes a pack the page has already loaded, the pack is not fetched again.
+     * When the same pack is linked more than once in the document itself, the
+     * first link in document order wins.
+     *
+     * Links are processed one at a time, in order. A failed fetch, a non-OK HTTP
+     * status, or a pack with no matching elements is logged and skipped, and
+     * loading continues with the next link.
+     *
+     * Example:
+     *   <link type="behaviors" src="/packs/ui.html">
+     *
+     *   loadLinkedPacks(document, "behaviors", "behavior[id]", registerBehaviorElement);
+     *
+     * @param {ParentNode} root
+     *        The node to search for <link> elements: the document, an element,
+     *        or a parsed fragment's DocumentFragment.
+     * @param {string} type
+     *        The link's type attribute to match (e.g. "behaviors", "templates").
+     *        Also used in log messages.
+     * @param {string} selector
+     *        CSS selector for the elements to extract from each pack
+     *        (e.g. "behavior[id]", "template[id]").
+     * @param {(item: Element, src: string) => void} register
+     *        Called once per matching element, with the element and the pack's
+     *        src URL. Responsible for storing or moving the element; this
+     *        function does not insert anything into the document itself.
+     * @returns {Promise<void>}
+     *          Resolves after every link under `root` has been processed.
+     ********************************************************************************/
+    async function loadLinkedPacks(root, type, selector, register) {
+        for (const link of root.querySelectorAll(`link[type="${type}"][src]`))
+        {
+            const src = link.getAttribute("src").trim();
+            if (src.length === 0)
+                continue;
+
+            try {
+                const existing = document.querySelector(`link[type="${type}"][src="${CSS.escape(src)}"]`);
+                if (existing && existing !== link)
+                    continue;
+
+                const items = parseHTML(await fetchText(src)).querySelectorAll(selector);
+
+                if (!items.length) {
+                    log.warn(`No ${selector} found in ${src}`); continue;
+                }
+
+                items.forEach(item => register(item, src));
+                log.log(`Loaded ${items.length} ${type} from: ${src}`);
+
+            } catch (err) {
+                log.error(`Failed to load ${type} from ${src}:`, err);
+            }
+        }
+    }
+
+
+    /**
+     * Loads behavior packs declared with <link type="behaviors" src="...">
+     * and registers every <behavior id="..."> they contain.
+     *
+     * @param {ParentNode} [root=document] - The node to search for links.
+     * @returns {Promise<void>}
+     */
+    async function loadBehaviorLinks(root = document) {
+        await loadLinkedPacks(root, "behaviors", "behavior[id]", registerBehaviorElement);
+    }
+
+
+    /**
+     * Loads template packs declared with <link type="templates" src="...">
+     * and moves every <template id="..."> they contain into the global
+     * <templates id="templates"> container. Templates whose id is already
+     * registered are skipped.
+     *
+     * @param {ParentNode} [root=document] - The node to search for links.
+     * @returns {Promise<void>}
+     */
+    async function loadTemplateLinks(root = document) {
+        await loadLinkedPacks(root, "templates", "template[id]",
+            tmpl => moveTemplateToGlobal(tmpl, getTemplatesContainer()));
+    }
+
 
     async function loadBehaviorsElements(root = document) {
 
@@ -37,60 +174,6 @@ const Frontend = (() => {
         {
             registerBehaviorElement(bEl, "inline");
             bEl.remove();
-        }
-    }
-
-
-    async function loadBehaviorLinks(root = document) {
-
-
-        const links = Array.from(root.querySelectorAll('link[type="behaviors"][src]'));
-
-        // --- Load external behavior packs ---
-        for (const link of links) {
-
-            const src = link.getAttribute("src");
-            if (!src)
-                continue;
-
-            try {
-
-                // Skip if this behavior pack is already in the document head
-                const alreadyLoaded = document.querySelector(`link[type="behaviors"][src="${src}"]`);
-
-                if (alreadyLoaded && alreadyLoaded !== link)
-                {
-                    console.debug(`[Frontend] Skipped already-loaded behaviors from ${src}`);
-                    continue;
-                }
-
-                const response = await fetch(src);
-
-                if (!response.ok)
-                    throw new Error(`HTTP ${response.status}`);
-
-                const html = await response.text();
-                const wrapper = document.createElement("div");
-
-                wrapper.innerHTML = html;
-
-                const behaviorEls = Array.from(wrapper.querySelectorAll("behavior[id]"));
-
-                if (behaviorEls.length === 0)
-                {
-                    console.warn(`[Frontend] No <behavior id="..."> found in ${src}`);
-                    continue;
-                }
-
-                for (const bEl of behaviorEls) {
-                    registerBehaviorElement(bEl, src);
-                }
-
-                console.log(`[Frontend] Loaded ${behaviorEls.length} behaviors from: ${src}`);
-
-            } catch (err) {
-                console.error(`[Frontend] Failed to load behaviors from ${src}:`, err);
-            }
         }
     }
 
@@ -288,56 +371,6 @@ const Frontend = (() => {
         }
 
         return loadedCount;
-    }
-
-
-    async function loadTemplateLinks(root = document)
-    {
-
-        const templateLinks = Array.from(root.querySelectorAll('link[type="templates"][src]'));
-
-        // --- Load from <link type="templates" src="..."> ---
-        if (templateLinks.length === 0)
-            return;
-
-        const templatesRoot = getTemplatesContainer();
-
-        for (const link of templateLinks) {
-            const src = link.getAttribute('src');
-            if (!src)
-                continue;
-
-            try {
-                const response = await fetch(src);
-
-                if (!response.ok)
-                    throw new Error(`HTTP ${response.status} for templates: ${src}`);
-
-                const html = await response.text();
-
-                // Parse fetched HTML
-                const wrapper = document.createElement('div');
-                wrapper.innerHTML = html;
-
-                // Grab all <template id="..."> elements
-                const templates = Array.from(wrapper.querySelectorAll('template[id]'));
-                if (templates.length === 0) {
-                    console.warn(`[Frontend] No <template id="..."> found in ${src}`);
-                    continue;
-                }
-
-                for (const tmpl of templates) {
-                    moveTemplateToGlobal(tmpl, templatesRoot);
-                }
-
-
-                console.log(`[Frontend] Loaded ${templates.length} templates from: ${src}`);
-
-
-            } catch (e) {
-                console.error(`[Frontend] Failed to load templates from ${src}:`, e);
-            }
-        }
     }
 
     /**
