@@ -24,7 +24,7 @@ const Frontend = (() => {
         dispatch("page:load_complete", { count: loadedCount, finishedAt: Date.now() });
     }
 
-    
+
     /**
      * Console logging with a "[Frontend]" prefix on every message.
      * Usage: log.warn("Something happened:", value);
@@ -198,7 +198,7 @@ const Frontend = (() => {
                 if (!existing) {
                     el.classList.add(`language-${lang}`);
                 } else if (existing !== lang) {
-                    console.warn(`[Frontend] <code> has class "language-${existing}" and language="${lang}"; using "${existing}"`, el);
+                    log.warn(`<code> has class "language-${existing}" and language="${lang}"; using "${existing}"`, el);
                 }
             }
 
@@ -212,7 +212,7 @@ const Frontend = (() => {
             if (el.dataset.loaded) { continue; }
 
             if (!src) {
-                console.error(`[Frontend] Failed to load code block. Empty src attribute.`);
+                log.error(`Failed to load code block. Empty src attribute.`);
                 el.dataset.loaded = "error";
                 continue;
             }
@@ -225,7 +225,7 @@ const Frontend = (() => {
                 el.textContent = await res.text();
                 el.dataset.loaded = "true";
             } catch (err) {
-                console.error(`[Frontend] Failed to load code block from ${src}:`, err);
+                log.error(`Failed to load code block from ${src}:`, err);
                 el.textContent = `/* Error loading ${src} */`;
                 el.dataset.loaded = "error";
                 continue;
@@ -292,7 +292,7 @@ const Frontend = (() => {
 
             if (src.endsWith(".md") || src.endsWith(".markdown") || src.endsWith(".mkd"))
             {
-                console.info(`[Frontend] Rendering Markdown fragment: ${src}`);
+                log.info(`Rendering Markdown fragment: ${src}`);
                 html = Frontend.renderMarkdown(raw);
 
                 // --- Param substitution ---
@@ -346,7 +346,7 @@ const Frontend = (() => {
 
             }
         } catch (err) {
-            console.error("Unexpected fragment error:", err);
+            log.error("Unexpected fragment error:", err);
             element.remove();
         }
         return loadedCount;
@@ -395,7 +395,7 @@ const Frontend = (() => {
 
             // Skip templates without IDs
             if (!id) {
-                console.warn("[Frontend] Ignored <template> without id:", tmpl);
+                log.warn("Ignored <template> without id:", tmpl);
                 continue;
             }
 
@@ -404,7 +404,7 @@ const Frontend = (() => {
             if (existing) {
                 // Compare content to see if they differ
                 if (existing.innerHTML !== tmpl.innerHTML) {
-                    console.warn(`[Frontend] Duplicate template id "${id}" detected — kept first, ignored new one.`);
+                    log.warn(`Duplicate template id "${id}" detected — kept first, ignored new one.`);
                 }
                 continue;
             }
@@ -435,27 +435,27 @@ const Frontend = (() => {
         // --- Find destination ---
         const destination = document.getElementById(destinationID);
         if (!destination) {
-            console.warn(`[Frontend] loadComponent: destination element not found: "${destinationID}"`);
+            log.warn(`loadComponent: destination element not found: "${destinationID}"`);
             return;
         }
 
         // --- Find template ---
         const templateContainer = document.querySelector("templates#templates");
         if (!templateContainer) {
-            console.error("[Frontend] loadComponent: global templates container not found.");
+            log.error("loadComponent: global templates container not found.");
             return;
         }
 
         const tmpl = templateContainer.querySelector(`template#${CSS.escape(templateID)}`);
         if (!tmpl) {
-            console.error(`[Frontend] loadComponent: template "${templateID}" not found.`);
+            log.error(`loadComponent: template "${templateID}" not found.`);
             return;
         }
 
         // --- Clone the template content ---
         const html = tmpl.innerHTML;
         if (!html.trim()) {
-            console.warn(`[Frontend] loadComponent: template "${templateID}" is empty.`);
+            log.warn(`loadComponent: template "${templateID}" is empty.`);
             destination.innerHTML = "";
             return;
         }
@@ -512,7 +512,7 @@ const Frontend = (() => {
      */
     function getComponentData(el) {
         if (!(el instanceof Element)) {
-            console.error("[Frontend] getComponentData() called with non-element:", el);
+            log.error("getComponentData() called with non-element:", el);
             return null;
         }
 
@@ -524,7 +524,7 @@ const Frontend = (() => {
         const onerror = el.getAttribute("onerror");
 
         if (!template) {
-            console.warn("[Frontend] <component> missing required template-id:", el);
+            log.warn(" <component> missing required template-id:", el);
             return null;
         }
 
@@ -557,7 +557,7 @@ const Frontend = (() => {
      */
     function getFragmentData(el) {
         if (!(el instanceof Element)) {
-            console.error("[Frontend] getFragmentData() called with non-element:", el);
+            log.error("getFragmentData() called with non-element:", el);
             return null;
         }
 
@@ -599,7 +599,7 @@ const Frontend = (() => {
      */
     function getTriggerData(el) {
         if (!(el instanceof Element)) {
-            console.error("[Frontend] getTriggerData() called with non-element:", el);
+            log.error("getTriggerData() called with non-element:", el);
             return null;
         }
 
@@ -617,7 +617,7 @@ const Frontend = (() => {
         const stop = el.hasAttribute("stop");
 
         if (!on || !action) {
-            console.warn("[Frontend] Ignored <trigger> missing 'on' or 'action':", el);
+            log.warn("Ignored <trigger> missing 'on' or 'action':", el);
             return null;
         }
 
@@ -653,33 +653,33 @@ const Frontend = (() => {
     function registerBehaviorElement(bEl, source = "unknown") {
 
         if (!(bEl instanceof Element)) {
-            console.error("[Frontend] registerBehaviorElement() called with non-element:", bEl);
+            log.error("registerBehaviorElement() called with non-element:", bEl);
             return;
         }
 
         const id = bEl.id?.trim();
 
         if (!id) {
-            console.warn(`[Frontend] Ignored <behavior> without id (${source})`);
+            log.warn(`Ignored <behavior> without id (${source})`);
             return;
         }
 
         // --- Duplicate guard ---
         if (Frontend._behaviors.has(id)) {
-            console.warn(`[Frontend] Duplicate behavior id "${id}" encountered in ${source} — skipped`);
+            log.warn(`Duplicate behavior id "${id}" encountered in ${source} — skipped`);
             return;
         }
 
         // --- Extract triggers ---
         const triggers = findChildTriggers(bEl).map(getTriggerData);
         if (triggers.length === 0) {
-            console.warn(`[Frontend] Behavior "${id}" (${source}) has no triggers — skipped`);
+            log.warn(`Behavior "${id}" (${source}) has no triggers — skipped`);
             return;
         }
 
         // --- Store in global registry ---
         Frontend._behaviors.set(id, triggers);
-        console.log(`[Frontend] Registered behavior "${id}" (${triggers.length} triggers) from ${source}`);
+        log.log(`Registered behavior "${id}" (${triggers.length} triggers) from ${source}`);
     }
 
 
@@ -697,7 +697,7 @@ const Frontend = (() => {
     function buildTriggers(root = document) {
 
         if (!(root instanceof Element) && !(root instanceof DocumentFragment) && root !== document) {
-            console.error("[Frontend] buildTriggers() called with invalid root:", root);
+            log.error("buildTriggers() called with invalid root:", root);
             return;
         }
 
@@ -728,7 +728,7 @@ const Frontend = (() => {
      */
     function buildElementTriggers(el) {
         if (!(el instanceof Element)) {
-            console.error("[Frontend] buildElementTriggers() called with non-element:", el);
+            log.error("buildElementTriggers() called with non-element:", el);
             return;
         }
 
@@ -767,7 +767,7 @@ const Frontend = (() => {
      */
     function findChildTriggers(parent) {
         if (!(parent instanceof Element)) {
-            console.error("[Frontend] findChildTriggers() called with non-element:", parent);
+            log.error("findChildTriggers() called with non-element:", parent);
             return [];
         }
 
@@ -796,7 +796,7 @@ const Frontend = (() => {
     function applyTriggersToElement(parent, triggers) {
 
         if (!(parent instanceof Element)) {
-            console.error("[Frontend] applyTriggersToElement() called with non-element:", parent);
+            log.error("applyTriggersToElement() called with non-element:", parent);
             return;
         }
 
@@ -847,7 +847,7 @@ const Frontend = (() => {
     async function buildElementDataBindings(el) {
 
         if (!(el instanceof Element)) {
-            console.error("[Frontend] buildElementDataBindings() called with non-element:", el);
+            log.error("buildElementDataBindings() called with non-element:", el);
             return;
         }
 
@@ -870,7 +870,7 @@ const Frontend = (() => {
     function findChildDataBindings(parent) {
 
         if (!(parent instanceof Element)) {
-            console.error("[Frontend] findChildDataBindings() called with non-element:", parent);
+            log.error("findChildDataBindings() called with non-element:", parent);
             return [];
         }
 
@@ -917,7 +917,7 @@ const Frontend = (() => {
     {
         if (!(parent instanceof Element))
         {
-            console.error("[Frontend] applyDataBindingsToElement() called with non-element:", parent);
+            log.error("applyDataBindingsToElement() called with non-element:", parent);
             return;
         }
 
@@ -930,7 +930,7 @@ const Frontend = (() => {
 
             // Invalid binding: warn and discard it
             if (!bindingKey || !bindingTarget) {
-                console.warn("[Frontend] Ignored <data-binding> missing 'key' or 'target':", binding);
+                log.warn("Ignored <data-binding> missing 'key' or 'target':", binding);
                 binding.remove();
                 continue;
             }
@@ -1001,7 +1001,7 @@ const Frontend = (() => {
     function resolveFragmentSource(fragData) {
 
         if (!fragData || typeof fragData !== "object" || !fragData.el) {
-            console.error("[Frontend] Invalid fragment context passed to resolveSource:", fragData);
+            log.error("Invalid fragment context passed to resolveSource:", fragData);
             return null;
         }
 
@@ -1020,7 +1020,7 @@ const Frontend = (() => {
                 return src;
             }
         } catch (e) {
-            console.error("[Frontend] Invalid fragment condition:", condition, e);
+            log.error("Invalid fragment condition:", condition, e);
         }
 
         if (fallback) {
@@ -1043,14 +1043,14 @@ const Frontend = (() => {
             const response = await fetch(src);
 
             if (!response.ok) {
-                console.warn(`[Frontend] Fragment fetch failed: ${src} (HTTP ${response.status})`);
+                log.warn(`Fragment fetch failed: ${src} (HTTP ${response.status})`);
                 return null;
             }
 
             return await response.text();
 
         } catch (e) {
-            console.error(`[Frontend] Error fetching fragment "${src}":`, e);
+            log.error(`Error fetching fragment "${src}":`, e);
             return null;
         }
     }
@@ -1064,13 +1064,13 @@ const Frontend = (() => {
         const fallbackContent = fragEl.innerHTML.trim();
 
         if (fallbackContent) {
-            console.info(`[Frontend] Using inline fallback for fragment: ${src}`);
+            log.info(`Using inline fallback for fragment: ${src}`);
             const wrapper = document.createElement("div");
             wrapper.innerHTML = fallbackContent;
             const newNodes = Array.from(wrapper.childNodes);
             fragEl.replaceWith(...newNodes);
         } else {
-            console.warn(`[Frontend] No inline fallback for fragment: ${src}`);
+            log.warn(`No inline fallback for fragment: ${src}`);
             fragEl.remove();
         }
 
@@ -1196,7 +1196,7 @@ const Frontend = (() => {
                 root.querySelectorAll("script").forEach(runScripts);
             }
         } catch (err) {
-            console.error("Script execution error:", err);
+            log.error("Script execution error:", err);
         }
     }
 
@@ -1249,7 +1249,7 @@ const Frontend = (() => {
             if (!id) continue;
 
             if (seen.has(id) || document.querySelector(`script#${CSS.escape(id)}`)) {
-                console.debug(`[Frontend] Skipped duplicate script "${id}"`);
+                log.debug(`Skipped duplicate script "${id}"`);
                 script.remove();
                 continue;
             }
@@ -1279,7 +1279,7 @@ const Frontend = (() => {
         for (const container of containers) {
             // Warn if nested <templates id="templates"> is found
             if (container.id === "templates") {
-                console.warn("[Frontend] Found embedded <templates id=\"templates\">; merging into global container.");
+                log.warn("Found embedded <templates id=\"templates\">; merging into global container.");
             }
 
             // Move all child <template> elements into the global templates root
@@ -1304,13 +1304,13 @@ const Frontend = (() => {
     function moveTemplateToGlobal(tmpl, templatesRoot) {
         const id = tmpl.id;
         if (!id) {
-            console.warn("[Frontend] Ignored <template> without id in fragment.");
+            log.warn("Ignored <template> without id in fragment.");
             return;
         }
 
         // Skip duplicates
         if (templatesRoot.querySelector(`template#${CSS.escape(id)}`)) {
-            console.warn(`[Frontend] Duplicate template id "${id}" in fragment — skipped`);
+            log.warn(`Duplicate template id "${id}" in fragment — skipped`);
             return;
         }
 
@@ -1347,11 +1347,11 @@ const Frontend = (() => {
      */
     function setMarkdownProcessor(fn) {
         if (typeof fn !== "function") {
-            console.error("[Frontend] setMarkdownProcessor requires a function");
+            log.error("setMarkdownProcessor requires a function");
             return;
         }
         markdownProcessor = fn;
-        console.log("[Frontend] Markdown processor registered.");
+        log.log("Markdown processor registered.");
     }
 
     /**
@@ -1364,7 +1364,7 @@ const Frontend = (() => {
         try {
             return markdownProcessor(text);
         } catch (err) {
-            console.error("[Frontend] Markdown processor failed:", err);
+            log.error("Markdown processor failed:", err);
             return `<pre>${text}</pre>`;
         }
     }
@@ -1392,7 +1392,7 @@ const Frontend = (() => {
             const here = keys.slice(0, i + 1).join(".");
 
             if (!(k in obj)) {
-                console.error(`[Frontend] Cannot set "${path}": "${here}" does not exist`);
+                log.error(`Cannot set "${path}": "${here}" does not exist`);
                 return;
             }
 
@@ -1401,7 +1401,7 @@ const Frontend = (() => {
             // Can't descend into a primitive or null
             if (obj === null || typeof obj !== "object") {
                 const kind = obj === null ? "null" : typeof obj;
-                console.error(`[Frontend] Cannot set "${path}": "${here}" is ${kind}, not an object`);
+                log.error(`Cannot set "${path}": "${here}" is ${kind}, not an object`);
                 return;
             }
         }
@@ -1416,7 +1416,7 @@ const Frontend = (() => {
 
                 dispatchDataEvent("deleted", path, undefined, oldValue);
             } else {
-                console.warn(`[Frontend] Tried to remove non-existent key "${path}"`);
+                log.warn(`Tried to remove non-existent key "${path}"`);
             }
 
             return;
@@ -1468,7 +1468,7 @@ const Frontend = (() => {
 
             if (!(k in obj))
             {
-                console.warn(`[Frontend] Cannot remove "${path}": "${here}" does not exist`);
+                log.warn(`Cannot remove "${path}": "${here}" does not exist`);
                 return; // nothing to remove
             }
                 
@@ -1476,7 +1476,7 @@ const Frontend = (() => {
             // Can't descend into a primitive or null
             if (obj === null || typeof obj !== "object") {
                 const kind = obj === null ? "null" : typeof obj;
-                console.warn(`[Frontend] Cannot remove "${path}": "${here}" is ${kind}, not an object`);
+                log.warn(`Cannot remove "${path}": "${here}" is ${kind}, not an object`);
                 return;
             }
         }
@@ -1525,14 +1525,14 @@ const Frontend = (() => {
             if (targetId) {
                 targetElement = document.getElementById(targetId);
                 if (!targetElement) {
-                    console.warn(`[Frontend] on-data-${type}-target element not found: "${targetId}"`);
+                    log.warn(`on-data-${type}-target element not found: "${targetId}"`);
                 }
             }
 
             try {
                 invokeEventAction(handler, el, path, path, oldValue, value, targetElement);
             } catch (e) {
-                console.error(`[Frontend] Error in on-data-${type} handler for ${path}:`, e);
+                log.error(`Error in on-data-${type} handler for ${path}:`, e);
             }
 
         }
@@ -1558,7 +1558,7 @@ const Frontend = (() => {
                 if (targetId) {
                     targetElement = document.getElementById(targetId);
                     if (!targetElement) {
-                        console.warn(`[Frontend] on-data-${type}-target element not found: "${targetId}"`);
+                        log.warn(`on-data-${type}-target element not found: "${targetId}"`);
                     }
                 }
 
@@ -1578,7 +1578,7 @@ const Frontend = (() => {
             );
 
         } catch (e) {
-            console.error(`[Frontend] Error in event handler:`, e);
+            log.error(`Error in event handler:`, e);
         }
     }
 
