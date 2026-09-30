@@ -1136,9 +1136,13 @@ const Frontend = (() => {
         // --- Run scripts & links ---
         newNodes.forEach(n => {
             handleFragmentLinks(n);
-            runScripts(n);
         });
 
+        // --- Run scripts & links ---
+        newNodes.forEach(n => {
+           
+            runScripts(n);
+        });
 
         return newNodes;
     }
