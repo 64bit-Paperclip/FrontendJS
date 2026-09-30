@@ -52,6 +52,23 @@ const Frontend = (() => {
 
 
     /**
+     * Fetches the text content at a fragment source URL.
+     * Returns null if the request fails, so the caller can use the inline fallback.
+     *
+     * @param {string} src - The resolved URL to fetch (main src or fallback).
+     * @returns {Promise<string|null>}
+     */
+    async function fetchFragment(src) {
+        try {
+            return await fetchText(src);
+        } catch (e) {
+            log.warn(`Fragment fetch failed: ${src}`, e);
+            return null;
+        }
+    }
+
+
+    /**
      * Parses an HTML string into a detached DocumentFragment.
      * Uses a <template> element so content is parsed without a surrounding
      * context: table rows, cells, list items, and options are all preserved,
@@ -220,9 +237,7 @@ const Frontend = (() => {
             
 
             try {
-                const res = await fetch(src);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                el.textContent = await res.text();
+                el.textContent = await fetchText(src);
                 el.dataset.loaded = "true";
             } catch (err) {
                 log.error(`Failed to load code block from ${src}:`, err);
@@ -357,11 +372,11 @@ const Frontend = (() => {
      * Skips any fragments that are nested inside <code> or <pre><code> blocks.
      * Returns the number of fragments successfully loaded.
      */
-    async function loadFragments(root) {
+    async function loadFragments(root)
+    {
         // Find all fragment[src] but filter out those inside <code> or <pre><code>
         const allFragments = Array.from(root.querySelectorAll("fragment[src]")).filter(frag => {
-            // Skip if any ancestor is a <code> element
-            return !frag.closest("code");
+            return !frag.closest("code");   // Skip if any ancestor is a <code> element
         });
 
         let loadedCount = 0;
@@ -1032,29 +1047,6 @@ const Frontend = (() => {
 
 
     /**
-     * Fetches the text content at a fragment source URL.
-     * Returns null if the request fails, so the caller can use the inline fallback.
-     *
-     * @param {string} src - The resolved URL to fetch (main src or fallback).
-     * @returns {Promise<string|null>}
-     */
-    async function fetchFragment(src) {
-        try {
-            const response = await fetch(src);
-
-            if (!response.ok) {
-                log.warn(`Fragment fetch failed: ${src} (HTTP ${response.status})`);
-                return null;
-            }
-
-            return await response.text();
-
-        } catch (e) {
-            log.error(`Error fetching fragment "${src}":`, e);
-            return null;
-        }
-    }
-    /**
      * Replaces a fragment element with its inline fallback content, if any.
      * Returns null (so callers can handle consistently).
      */
@@ -1126,14 +1118,14 @@ const Frontend = (() => {
         wrapper.innerHTML = html;
         const root = wrapper.content;
 
-        removeDuplicateScripts(root);
-        loadBehaviorLinks(root);
-        loadBehaviorsElements(root);
-        loadTemplateLinks(root);
-        loadTemplates(root);
-        buildTriggers(root);
-        buildDataBindings(root);
-        loadCodeElements(root);         // --- Parse and Load code src attributes
+        await removeDuplicateScripts(root);
+        await loadBehaviorLinks(root);
+        await loadBehaviorsElements(root);
+        await loadTemplateLinks(root);
+        await loadTemplates(root);
+        await buildTriggers(root);
+        await buildDataBindings(root);
+        await loadCodeElements(root);         // --- Parse and Load code src attributes
 
         const newNodes = Array.from(root.childNodes);
 
