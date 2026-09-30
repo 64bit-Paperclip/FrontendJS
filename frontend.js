@@ -332,7 +332,7 @@ const Frontend = (() => {
                 const substituted = substituteParams(html, currentFrag.params);
             
                 // --- Parse & replace ---
-                const newNodes = parseFragment(substituted, currentFrag);
+                const newNodes = await parseFragment(substituted, currentFrag);
 
 
 
@@ -1112,13 +1112,13 @@ const Frontend = (() => {
      * Parses HTML into DOM nodes and replaces the original fragment.
      * Returns an array of the new nodes.
      */
-    function parseFragment(html, fragData) {
+    async function parseFragment(html, fragData) {
 
         const wrapper = document.createElement("template");
         wrapper.innerHTML = html;
         const root = wrapper.content;
 
-        await removeDuplicateScripts(root);
+        removeDuplicateScripts(root);
         await loadBehaviorLinks(root);
         await loadBehaviorsElements(root);
         await loadTemplateLinks(root);
