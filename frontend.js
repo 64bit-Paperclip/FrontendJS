@@ -1,6 +1,7 @@
 const Frontend = (() => {
 
     const state = {};
+    const dataListeners = new Set();
     let markdownProcessor = text => `<pre>${text}</pre>`; // default fallback
 
 
@@ -9,6 +10,7 @@ const Frontend = (() => {
      * Loads templates, behaviors, triggers, and code elements at the document level.
      ********************************************************************************/
     async function initialize() {
+        
         if (!Frontend._behaviors)
             Frontend._behaviors = new Map();
 
@@ -46,7 +48,10 @@ const Frontend = (() => {
      */
     async function fetchText(src) {
         const res = await fetch(src);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        if (!res.ok) throw
+            new Error(`HTTP ${res.status}`);
+
         return res.text();
     }
 
@@ -1136,11 +1141,6 @@ const Frontend = (() => {
         // --- Run scripts & links ---
         newNodes.forEach(n => {
             handleFragmentLinks(n);
-        });
-
-        // --- Run scripts & links ---
-        newNodes.forEach(n => {
-           
             runScripts(n);
         });
 
@@ -1500,6 +1500,32 @@ const Frontend = (() => {
         }
     }
 
+    /********************************************************************************
+     * Subscribes to data events for a specific path.
+     *
+     * @param {"added"|"changed"|"deleted"|"*"} type - Event type, or "*" for all.
+     * @param {string} pattern - Exact path ("user.name"), a subtree ("user.*"),
+     *                           or "*" for every path.
+     * @param {(e: {type, path, value, oldValue}) => void} handler
+     * @returns {() => void} Call to unsubscribe.
+     ********************************************************************************/
+    function onData(type, pattern, handler) {
+        const entry = { type, pattern, handler };
+        dataListeners.add(entry);
+        return () => dataListeners.delete(entry);
+    }
+
+    function matchesPath(pattern, path) {
+        if (pattern === "*" || pattern === path)
+            return true;
+
+        // "user.*" matches user.name, user.profile.age, etc. (any depth)
+        if (pattern.endsWith(".*"))
+            return path.startsWith(pattern.slice(0, -1));
+
+        return false;
+    }
+
 
     /**
      * Finds elements bound to a given path and updates them.
@@ -1559,6 +1585,20 @@ const Frontend = (() => {
                 }
 
                 invokeEventAction(handler, el, path, key, oldValue, value, undefined);
+            }
+        }
+
+        for (const l of [...dataListeners]) {
+            if (l.type !== "*" && l.type !== type)
+                continue;
+
+            if (!matchesPath(l.pattern, path))
+                continue;
+
+            try {
+                l.handler({ type, path, value, oldValue });
+            } catch (e) {
+                log.error(`Error in onData handler for "${l.pattern}":`, e);
             }
         }
 
@@ -1664,9 +1704,6 @@ const Frontend = (() => {
                 break;
         }
     }
-
-
-
 
     /**
      * Dispatches a CustomEvent with detail payload on document.
