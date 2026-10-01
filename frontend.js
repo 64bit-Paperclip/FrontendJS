@@ -18,7 +18,7 @@ const Frontend = (() => {
         await loadLinkedPacks(document, "templates", "template[id]", tmpl => moveTemplateToGlobal(tmpl, getTemplatesContainer()));
         await loadTemplates(document);
         await compileChildren(document, 'trigger', applyTrigger)
-        await compileChildren(document, 'data-binding', applyDataBinding)
+        await compileChildren(document, 'data-binding', applyDataBindingToOwner)
         await loadCodeElements(document);
 
         const loadedCount = await loadFragments(document);
@@ -752,7 +752,7 @@ const Frontend = (() => {
 
     }
     
-    function applyDataBinding(owner, binding)
+    function applyDataBindingToOwner(owner, binding)
     {
         const key = binding.getAttribute("key");
         const target = binding.getAttribute("target");
@@ -935,7 +935,7 @@ const Frontend = (() => {
         //await buildTriggers(root);
         await compileChildren(root, 'trigger', applyTrigger)
         //await buildDataBindings(root);
-        await compileChildren(root, 'data-binding', applyDataBinding)
+        await compileChildren(root, 'data-binding', applyDataBindingToOwner)
         await loadCodeElements(root);         // --- Parse and Load code src attributes
 
         const newNodes = Array.from(root.childNodes);
