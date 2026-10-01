@@ -1726,6 +1726,7 @@ const Frontend = (() => {
     return {
         initialize,
         on,
+        onData,
         setData,
         getData,
         loadComponent,
