@@ -37,6 +37,9 @@ const Frontend = (() => {
         )
     );
 
+    const isContainer = v => v !== null && typeof v === "object";
+    const isPlainObject = v => isContainer(v) && !Array.isArray(v);
+
 
     /**
      * Fetches a URL and returns the response body as text.
@@ -1373,69 +1376,74 @@ const Frontend = (() => {
      * 
      **************************************************************************************/
 
+    function emitDataDiffEvents(path, oldVal, newVal)
+    {
+        if (Object.is(oldVal, newVal))
+            return false;
 
-    /**
-     * Sets a value in the global state and updates bound elements.
-     * Path can be nested ("user.name").
-     */
-    function setData(path, value) {
+        const oldKids = isContainer(oldVal) ? oldVal : null;
+        const newKids = isContainer(newVal) ? newVal : null;
+        const keys = new Set([
+            ...(oldKids ? Object.keys(oldKids) : []),
+            ...(newKids ? Object.keys(newKids) : [])
+        ]);
 
+        let childChanged = false;
+        for (const k of keys) {
+            childChanged = emitDataDiffEvents(`${path}.${k}`, oldKids?.[k], newKids?.[k]) || childChanged;
+        }
+
+
+        // Two containers of the same kind with identical contents: no event
+        const sameKind = oldKids && newKids && Array.isArray(oldVal) === Array.isArray(newVal);
+        if (sameKind && !childChanged)
+            return false;
+
+        const type = oldVal === undefined ? "added"
+                : newVal === undefined ? "deleted"
+                : "changed";
+        dispatchDataEvent(type, path, newVal, oldVal);
+        return true;
+    }
+    
+    function commitData(path, newVal){
         const keys = path.split(".");
-        let obj = state;
+        const last = keys.pop();
+        let parent = state;
 
-        for (let i = 0; i < keys.length - 1; i++) {
-            const k = keys[i];
-            const here = keys.slice(0, i + 1).join(".");
-
-            if (!(k in obj)) {
-                log.error(`Cannot set "${path}": "${here}" does not exist`);
-                return;
-            }
-
-            obj = obj[k];
-
-            // Can't descend into a primitive or null
-            if (obj === null || typeof obj !== "object") {
-                const kind = obj === null ? "null" : typeof obj;
-                log.error(`Cannot set "${path}": "${here}" is ${kind}, not an object`);
+        for (const k of keys) {
+            parent = parent?.[k];
+            if (!isContainer(parent)) {
+                log.error(`Cannot write "${path}": "${k}" is missing or not an object`);
                 return;
             }
         }
 
-        const lastKey = keys[keys.length - 1];
-        const existed = lastKey in obj;
-        const oldValue = obj[lastKey];
-
-        if (value === null || value === undefined) {
-            if (existed) {
-                delete obj[lastKey];
-
-                dispatchDataEvent("deleted", path, undefined, oldValue);
-            } else {
-                log.warn(`Tried to remove non-existent key "${path}"`);
-            }
-
-            return;
-        }
-
-        obj[lastKey] = value;
-
-        if (!existed) {
-            dispatchDataEvent("added", path, value, oldValue);
+        const oldVal = parent[last];
+        if (newVal === undefined)
+        {
+            delete parent[last];
         } else {
-            dispatchDataEvent("changed", path, value, oldValue);
+            parent[last] = newVal;
         }
 
-        // Fire per-child 'add' updates for array or object values
-        // TODO: This should probably be recursive?
-        if (value && (Array.isArray(value) || typeof value === "object")) {
-            const entries = Array.isArray(value) ? value.entries() : Object.entries(value);
+        emitDataDiffEvents(path, oldVal, newVal);
+    }
 
-            for (const [key, child] of entries) {
-                dispatchDataEvent("added", `${path}.${key}`, child, undefined);
+    function mergeData(target, patch) {
+        if (!isPlainObject(patch))
+            return patch == null ? undefined : structuredClone(patch);
 
+        const result = isPlainObject(target) ? structuredClone(target) : {};
+        for (const [k, v] of Object.entries(patch)) {
+            if (v == null)
+            {
+                delete result[k];
+            } else {
+                result[k] = mergeData(result[k], v);
             }
         }
+        return result;
     }
 
 
@@ -1448,45 +1456,26 @@ const Frontend = (() => {
     }
 
 
+    function patchData(path, patch) {
+        commitData(path, mergeData(getData(path), patch));
+    }
+
     /**
      * Removes a value from the global state at a given path.
      * Fires data:removed and updates bound elements.
      */
-    function removeData(path)
-    {
-        const keys = path.split(".");
-        let obj = state;
-
-        for (let i = 0; i < keys.length - 1; i++)
-        {
-            const k = keys[i];
-            const here = keys.slice(0, i + 1).join(".");
-
-            if (!(k in obj))
-            {
-                log.warn(`Cannot remove "${path}": "${here}" does not exist`);
-                return; // nothing to remove
-            }
-                
-            obj = obj[k];
-            // Can't descend into a primitive or null
-            if (obj === null || typeof obj !== "object") {
-                const kind = obj === null ? "null" : typeof obj;
-                log.warn(`Cannot remove "${path}": "${here}" is ${kind}, not an object`);
-                return;
-            }
-        }
-
-        const lastKey = keys[keys.length - 1];
-
-        if (lastKey in obj) {
-            const oldValue = obj[lastKey];
-            delete obj[lastKey];
-
-            dispatchDataEvent("deleted", path, undefined, oldValue);
-
-        }
+    function removeData(path) {
+        commitData(path, undefined);
     }
+
+    /**
+     * Sets a value in the global state and updates bound elements.
+     * Path can be nested ("user.name").
+     */
+    function setData(path, value) {
+        commitData(path, mergeData(undefined, value));
+    }
+
 
     /**
      * Resets the entire state object to empty.
