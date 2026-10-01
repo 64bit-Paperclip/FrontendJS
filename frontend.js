@@ -726,7 +726,7 @@ const Frontend = (() => {
 
         for (const element of elements)
         {
-            for (const child of element.querySelectorAll(`:scope > $[${tag}]`) )
+            for (const child of element.querySelectorAll(`:scope > ${tag}`) )
             {
                 applyFunc(element, child);
                 child.remove();
