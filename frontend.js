@@ -761,10 +761,10 @@ const Frontend = (() => {
             return log.warn("Ignored: <data-binding> missing 'key' or 'target':", binding);
 
         // Compile to an attribute that updateDataBindings() will find later
-        owner.setAttribute(`data-bind-${bindingTarget}`, bindingKey);
-        const current = getData(bindingKey);
+        owner.setAttribute(`data-bind-${target}`, key);
+        const current = getData(key);
         if (current !== undefined)
-            applyDataBinding(owner, bindingTarget.split("-"), current);
+            applyDataBinding(owner, target.split("-"), current);
 
     }
 
