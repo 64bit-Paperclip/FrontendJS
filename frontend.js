@@ -1,7 +1,9 @@
 const Frontend = (() => {
 
-    const state = {};
+    const state         = {};
     const dataListeners = new Set();
+    const _behaviors     = new Map();
+    
     let markdownProcessor = text => `<pre>${text}</pre>`; // default fallback
 
 
@@ -9,17 +11,16 @@ const Frontend = (() => {
      * Performs one-time initialization for the Frontend runtime.
      * Loads templates, behaviors, triggers, and code elements at the document level.
      ********************************************************************************/
-    async function initialize() {
-
-        if (!Frontend._behaviors)
-            Frontend._behaviors = new Map();
-
-        await loadBehaviorLinks(document);
+    async function initialize()
+    {
+        await loadLinkedPacks(document, "behaviors", "behavior[id]", registerBehaviorElement);
         await loadBehaviorsElements(document);
-        await loadTemplateLinks(document);
+        await loadLinkedPacks(document, "templates", "template[id]", tmpl => moveTemplateToGlobal(tmpl, getTemplatesContainer()));
         await loadTemplates(document);
-        await buildTriggers(document);
-        await buildDataBindings(document);
+        //await buildTriggers(document);
+        await compileChildren(document, 'trigger', applyTrigger)
+        //await buildDataBindings(document);
+        await compileChildren(document, 'data-binding', applyDataBinding)
         await loadCodeElements(document);
 
         const loadedCount = await loadFragments(document);
@@ -160,33 +161,6 @@ const Frontend = (() => {
     }
 
 
-    /**
-     * Loads behavior packs declared with <link type="behaviors" src="...">
-     * and registers every <behavior id="..."> they contain.
-     *
-     * @param {ParentNode} [root=document] - The node to search for links.
-     * @returns {Promise<void>}
-     */
-    async function loadBehaviorLinks(root = document) {
-        await loadLinkedPacks(root, "behaviors", "behavior[id]", registerBehaviorElement);
-    }
-
-
-    /**
-     * Loads template packs declared with <link type="templates" src="...">
-     * and moves every <template id="..."> they contain into the global
-     * <templates id="templates"> container. Templates whose id is already
-     * registered are skipped.
-     *
-     * @param {ParentNode} [root=document] - The node to search for links.
-     * @returns {Promise<void>}
-     */
-    async function loadTemplateLinks(root = document) {
-        await loadLinkedPacks(root, "templates", "template[id]",
-            tmpl => moveTemplateToGlobal(tmpl, getTemplatesContainer()));
-    }
-
-
     async function loadBehaviorsElements(root = document) {
 
         const inlineBehaviors = Array.from(root.querySelectorAll('behavior[id]'));
@@ -241,8 +215,6 @@ const Frontend = (() => {
                 el.dataset.loaded = "error";
                 continue;
             }
-
-            
 
             try {
                 el.textContent = await fetchText(src);
@@ -712,66 +684,7 @@ const Frontend = (() => {
      * 
      ***************************************************************************************/
 
-    /**
-     * Recursively compiles all <trigger> elements within a subtree.
-     *
-     * @param {ParentNode} root - The root element or fragment wrapper to scan.
-     */
-    function buildTriggers(root = document) {
-
-        if (!(root instanceof Element) && !(root instanceof DocumentFragment) && root !== document) {
-            log.error("buildTriggers() called with invalid root:", root);
-            return;
-        }
-
-        // --- Step 1: Build triggers for the root itself (if it has any immediate <trigger> children)
-        if (root instanceof Element && root.matches(':has(> trigger)')) {
-            buildElementTriggers(root);
-        }
-
-        // --- Step 2: Find all descendants that have immediate <trigger> children
-        const elementsWithTriggers = root.querySelectorAll(':has(> trigger)');
-
-        // --- Step 3: Apply triggers for each
-        elementsWithTriggers.forEach(el => buildElementTriggers(el));
-    }
-
-
-
-
-    /**
-     * Compiles all immediate <trigger> children of an element
-     * into executable attribute-based bindings.
-     *
-     * This is typically called during fragment parsing or component
-     * initialization to resolve declarative trigger markup into
-     * actual behavior definitions on the element.
-     *
-     * @param {Element} el - The element to process.
-     */
-    function buildElementTriggers(el) {
-        if (!(el instanceof Element)) {
-            log.error("buildElementTriggers() called with non-element:", el);
-            return;
-        }
-
-        // Step 1: Find all immediate <trigger> children
-        const triggers = findChildTriggers(el);
-        if (triggers.length === 0)
-            return;
-
-        // Step 2: Apply (compile) those triggers to the element
-        applyTriggersToElement(el, triggers);
-
-        // Step 3: Clean up any lingering <trigger> tags (defensive)
-        for (const trig of triggers) {
-            if (trig.parentNode === el) {
-                trig.remove();
-            }
-        }
-    }
-
-
+    
     /**
      * Finds all immediate (non-nested) <trigger> elements
      * that are direct children of a given parent element.
@@ -807,166 +720,56 @@ const Frontend = (() => {
 
 
 
-    /**
-     * Translates <trigger> child elements into equivalent
-     * inline event or data attributes on the parent element.
-     *
-     * Each <trigger> element is consumed and removed after compilation.
-     *
-     * @param {Element} parent     The element to apply triggers to.
-     * @param {Element[]} triggers The immediate <trigger> child elements.
-     */
-    function applyTriggersToElement(parent, triggers) {
 
-        if (!(parent instanceof Element)) {
-            log.error("applyTriggersToElement() called with non-element:", parent);
-            return;
-        }
-
-        if (!Array.isArray(triggers) || triggers.length === 0)
-            return;
-
-        for (const trigEl of triggers) {
-            const t = getTriggerData(trigEl);
-            if (!t) continue;
-
-            // Build a normalized attribute representation
-            // For example: <trigger on="click" do="..." condition="...">
-            // → <div on-click="..." data-trigger-condition="...">
-            const baseName = `on-${t.on}`;
-            
-            if (t.action) { parent.setAttribute(baseName, t.action); }          // Set primary action attribute
-            if (t.key) { parent.setAttribute(`${baseName}-key`, t.key); }       // Optional target/from scoping
-            if (t.target) { parent.setAttribute(`${baseName}-target`, t.target); }
-            if (t.condition) parent.setAttributeNS(`${baseName}-condition`, t.condition);
-
-            // Boolean flags
-            if (t.once) parent.setAttribute(`${baseName}-once`, "");
-            if (t.prevent) parent.setAttribute(`${baseName}-prevent`, "");
-            if (t.stop) parent.setAttribute(`${baseName}-stop`, "");
-
-
-            // Remove the trigger element after compilation
-            trigEl.remove();
-        }
-    }
-
-
-
-    async function buildDataBindings(root = document) {
-        // --- Step 1: Build triggers for the root itself (if it has any immediate <data-binding> children)
-        if (root instanceof Element && root.matches(':has(> data-binding)')) {
-            buildElementDataBindings(root);
-        }
-
-        // --- Step 2: Find all descendants that have immediate <data-binding> children
-        const elementsWithDataBindings = root.querySelectorAll(':has(> data-binding)');
-
-        // --- Step 3: Apply Data Bindings for each
-        elementsWithDataBindings.forEach(el => buildElementDataBindings(el));
-
-    }
-
-    async function buildElementDataBindings(el) {
-
-        if (!(el instanceof Element)) {
-            log.error("buildElementDataBindings() called with non-element:", el);
-            return;
-        }
-
-        // Step 1: Find all immediate <data-binding> children
-        const bindings = findChildDataBindings(el);
-        if (bindings.length === 0)
-            return;
-
-        // Step 2: Apply (compile) those triggers to the element
-        applyDataBindingsToElement(el, bindings);
-
-        // Step 3: Clean up any lingering <data-bindings> tags 
-        for (const bind of bindings) {
-            if (bind.parentNode === el) {
-                bind.remove();
-            }
-        }
-    }
-
-    function findChildDataBindings(parent) {
-
-        if (!(parent instanceof Element)) {
-            log.error("findChildDataBindings() called with non-element:", parent);
-            return [];
-        }
-
-        const bindings = [];
-
-        for (const child of parent.children) {
-            if (child.tagName.toLowerCase() === "data-binding") {
-                bindings.push(child);
-            }
-        }
-
-        return bindings;
-    }
-
-    /********************************************************************************
-     * 
-     * Compiles <data-binding> child elements into data-bind-* attributes
-     * on their parent element, then removes the <data-binding> elements.
-     *
-     * Each binding links a state key to a target on the parent. When that key
-     * changes via setData(), updateDataBindings() finds the attribute and
-     * applies the new value through applyDataBinding().
-     *
-     * If the key already has a value in state, it is applied immediately so
-     * the element is populated on first render rather than on the next change.
-     *
-     * Example:
-     *   <span>
-     *     <data-binding key="user.name" target="text"></data-binding>
-     *     <data-binding key="theme.color" target="style-color"></data-binding>
-     *   </span>
-     *
-     *   → <span data-bind-text="user.name" data-bind-style-color="theme.color">
-     *
-     * Supported targets (see applyDataBinding):
-     *   text, html, value, class, visible, style-<prop>, attr-<name>,
-     *   or any other name, which is set as a plain attribute.
-     *
-     * @param {Element}   parent   The element receiving the bindings.
-     * @param {Element[]} bindings Its immediate <data-binding> children.
-     * 
-     ********************************************************************************/
-    function applyDataBindingsToElement(parent, bindings)
+    function compileChildren(root, tag,  applyFunc)
     {
-        if (!(parent instanceof Element))
+        const elements = [...root.querySelectorAll(`:has(> $[${tag}])`)];
+
+        if (root instanceof Element && root.matches(`:has(> $[${tag}])`))
+            elements.unshift(root);
+
+        for (const element of elements)
         {
-            log.error("applyDataBindingsToElement() called with non-element:", parent);
-            return;
-        }
-
-        if (!Array.isArray(bindings) || bindings.length === 0)
-            return;
-
-        for (const binding of bindings) {
-            const bindingKey = binding.getAttribute("key");
-            const bindingTarget = binding.getAttribute("target");
-
-            // Invalid binding: warn and discard it
-            if (!bindingKey || !bindingTarget) {
-                log.warn("Ignored <data-binding> missing 'key' or 'target':", binding);
-                binding.remove();
-                continue;
+            for (const child of onwebkittransitionend.querySelectorAll(`:scope > $[${tag}]`) )
+            {
+                applyFunc(onwebkittransitionend, child);
+                child.remove();
             }
-
-            // Compile to an attribute that updateDataBindings() will find later
-            parent.setAttribute(`data-bind-${bindingTarget}`, bindingKey);
-
-            // Apply the current value immediately, if state already has one
-            const current = getData(bindingKey);
-            if (current !== undefined) applyDataBinding(parent, bindingTarget.split("-"), current);
-
-            binding.remove();
         }
+
+    }
+
+    function applyTrigger(owner, trigger) {
+
+        const t = getTriggerData(trigger);
+        if (!t)
+            return;
+
+        const baseName = `on-${t.on}`;
+        for (const k of ["key", "target", "condition"])
+            if (t[k])
+                owner.setAttribute(`${base}-${k}`, t[k]);
+
+        for (const k of ["once", "prevent", "stop"])
+            if (t[k])
+                owner.setAttribute(`${base}-${k}`, "");
+
+    }
+    
+    function applyDataBinding(owner, binding)
+    {
+        const key = binding.getAttribute("key");
+        const target = binding.getAttribute("target");
+
+        if (!key || !target)
+            return log.warn("Ignored: <data-binding> missing 'key' or 'target':", binding);
+
+        // Compile to an attribute that updateDataBindings() will find later
+        owner.setAttribute(`data-bind-${bindingTarget}`, bindingKey);
+        const current = getData(bindingKey);
+        if (current !== undefined)
+            applyDataBinding(owner, bindingTarget.split("-"), current);
+
     }
 
 
@@ -1101,19 +904,20 @@ const Frontend = (() => {
      */
     function substituteParams(html, params) {
         return html.replace(/{{\s*([\w.$-]+)\s*}}/g, (match, key) => {
+            
             // 1. Explicit fragment params take priority
-            if (params && key in params) return params[key];
+            if (params && key in params)
+                return params[key];
 
             // 2. Fallback to global state (dot paths supported)
             const stateVal = getData(key);
-            if (stateVal !== undefined && stateVal !== null) return stateVal;
+            if (stateVal !== undefined && stateVal !== null)
+                return stateVal;
 
             // 3. Unknown → leave token as-is
             return match;
         });
     }
-
-
 
 
     /**
@@ -1127,12 +931,15 @@ const Frontend = (() => {
         const root = wrapper.content;
 
         removeDuplicateScripts(root);
-        await loadBehaviorLinks(root);
+        await loadLinkedPacks(root, "behaviors", "behavior[id]", registerBehaviorElement);
         await loadBehaviorsElements(root);
-        await loadTemplateLinks(root);
+        await loadLinkedPacks(root, "templates", "template[id]", tmpl => moveTemplateToGlobal(tmpl, getTemplatesContainer()));
         await loadTemplates(root);
-        await buildTriggers(root);
-        await buildDataBindings(root);
+
+        //await buildTriggers(root);
+        await compileChildren(root, 'trigger', applyTrigger)
+        //await buildDataBindings(root);
+        await compileChildren(root, 'data-binding', applyDataBinding)
         await loadCodeElements(root);         // --- Parse and Load code src attributes
 
         const newNodes = Array.from(root.childNodes);
@@ -1430,7 +1237,7 @@ const Frontend = (() => {
         emitDataDiffEvents(path, oldVal, newVal);
     }
 
-    function mergeData(target, patch) {
+    function mergeDataValues(target, patch) {
         if (!isPlainObject(patch))
             return patch == null ? undefined : structuredClone(patch);
 
@@ -1440,7 +1247,7 @@ const Frontend = (() => {
             {
                 delete result[k];
             } else {
-                result[k] = mergeData(result[k], v);
+                result[k] = mergeDataValues(result[k], v);
             }
         }
         return result;
@@ -1457,7 +1264,7 @@ const Frontend = (() => {
 
 
     function patchData(path, patch) {
-        commitData(path, mergeData(getData(path), patch));
+        commitData(path, mergeDataValues(getData(path), patch));
     }
 
     /**
@@ -1473,7 +1280,7 @@ const Frontend = (() => {
      * Path can be nested ("user.name").
      */
     function setData(path, value) {
-        commitData(path, mergeData(undefined, value));
+        commitData(path, mergeDataValues(undefined, value));
     }
 
 
@@ -1557,7 +1364,8 @@ const Frontend = (() => {
             const selector = `[on-data-child-${type}-key="${key}"]`;
 
             const matches = document.querySelectorAll(selector);
-            if (matches.length === 0) continue;
+            if (matches.length === 0)
+                continue;
 
             for (const el of matches) {
                 const handler = el.getAttribute(`on-data-child-${type}`);
