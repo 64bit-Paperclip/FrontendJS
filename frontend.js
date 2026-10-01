@@ -17,9 +17,7 @@ const Frontend = (() => {
         await loadBehaviorsElements(document);
         await loadLinkedPacks(document, "templates", "template[id]", tmpl => moveTemplateToGlobal(tmpl, getTemplatesContainer()));
         await loadTemplates(document);
-        //await buildTriggers(document);
         await compileChildren(document, 'trigger', applyTrigger)
-        //await buildDataBindings(document);
         await compileChildren(document, 'data-binding', applyDataBinding)
         await loadCodeElements(document);
 
@@ -723,9 +721,9 @@ const Frontend = (() => {
 
     function compileChildren(root, tag,  applyFunc)
     {
-        const elements = [...root.querySelectorAll(`:has(> $[${tag}])`)];
+        const elements = [...root.querySelectorAll(`:has(> ${tag})`)];
 
-        if (root instanceof Element && root.matches(`:has(> $[${tag}])`))
+        if (root instanceof Element && root.matches(`:has(> ${tag})`))
             elements.unshift(root);
 
         for (const element of elements)
