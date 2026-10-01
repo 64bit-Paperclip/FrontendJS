@@ -10,7 +10,7 @@ const Frontend = (() => {
      * Loads templates, behaviors, triggers, and code elements at the document level.
      ********************************************************************************/
     async function initialize() {
-        
+
         if (!Frontend._behaviors)
             Frontend._behaviors = new Map();
 
@@ -49,8 +49,8 @@ const Frontend = (() => {
     async function fetchText(src) {
         const res = await fetch(src);
 
-        if (!res.ok) throw
-            new Error(`HTTP ${res.status}`);
+        if (!res.ok)
+            throw new Error(`HTTP ${res.status}`);
 
         return res.text();
     }
