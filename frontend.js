@@ -31,9 +31,7 @@ const Frontend = (() => {
      * Usage: log.warn("Something happened:", value);
      */
     const log = Object.fromEntries(
-        ["debug", "info", "log", "warn", "error"].map(level =>
-            [level, (...args) => console[level]("[Frontend]", ...args)]
-        )
+        ["debug", "info", "log", "warn", "error"].map(level => [level, (...args) => console[level]("[Frontend]", ...args)])
     );
 
     const isContainer = v => v !== null && typeof v === "object";
@@ -728,9 +726,9 @@ const Frontend = (() => {
 
         for (const element of elements)
         {
-            for (const child of onwebkittransitionend.querySelectorAll(`:scope > $[${tag}]`) )
+            for (const child of element.querySelectorAll(`:scope > $[${tag}]`) )
             {
-                applyFunc(onwebkittransitionend, child);
+                applyFunc(element, child);
                 child.remove();
             }
         }
