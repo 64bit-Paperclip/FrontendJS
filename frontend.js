@@ -6,6 +6,14 @@ const Frontend = (() => {
     
     let markdownProcessor = text => `<pre>${text}</pre>`; // default fallback
 
+    /**
+     * Console logging with a "[Frontend]" prefix on every message.
+     * Usage: log.warn("Something happened:", value);
+     */
+    const log = Object.fromEntries(["debug", "info", "log", "warn", "error"].map(level => [level, (...args) => console[level]("[Frontend]", ...args)]));
+    const isContainer = v => v !== null && typeof v === "object";
+    const isPlainObject = v => isContainer(v) && !Array.isArray(v);
+
 
     /********************************************************************************
      * Performs one-time initialization for the Frontend runtime.
@@ -13,39 +21,33 @@ const Frontend = (() => {
      ********************************************************************************/
     async function initialize()
     {
-        await loadLinkedPacks(document, "behaviors", "behavior[id]", registerBehaviorElement);
-        await loadBehaviorsElements(document);
-        await loadLinkedPacks(document, "templates", "template[id]", tmpl => moveTemplateToGlobal(tmpl, getTemplatesContainer()));
-        await loadTemplates(document);
-        await compileChildren(document, 'trigger', applyTrigger)
-        await compileChildren(document, 'data-binding', applyDataBindingToOwner)
-        await loadCodeElements(document);
-
-        const loadedCount = await loadFragments(document);
+        const loadedCount = await processNode(document);
         dispatch("page:load_complete", { count: loadedCount, finishedAt: Date.now() });
     }
 
+    async function processNode(node)
+    {
+        await loadLinkedPacks(node, "behaviors", "behavior[id]", registerBehaviorElement);
+        await loadBehaviorsElements(node);
+        await loadLinkedPacks(node, "templates", "template[id]", tmpl => moveTemplateToGlobal(tmpl, getTemplatesContainer()));        
+        await loadTemplates(node);
+        await compileChildren(node, 'trigger', applyTrigger);
+        await compileChildren(node, 'data-binding', buildDataBinding);
+        await loadCodeElements(node);
 
-    /**
-     * Console logging with a "[Frontend]" prefix on every message.
-     * Usage: log.warn("Something happened:", value);
-     */
-    const log = Object.fromEntries(
-        ["debug", "info", "log", "warn", "error"].map(level => [level, (...args) => console[level]("[Frontend]", ...args)])
-    );
-
-    const isContainer = v => v !== null && typeof v === "object";
-    const isPlainObject = v => isContainer(v) && !Array.isArray(v);
+        const loadedCount = await loadFragments(node);
+        return loadedCount;
+    }
 
 
-    /**
+    /********************************************************************************
      * Fetches a URL and returns the response body as text.
      * Throws on network failure or a non-OK HTTP status, so callers can
      * handle every failure in a single catch.
      *
      * @param {string} src - The URL to fetch.
      * @returns {Promise<string>} The response body.
-     */
+     ********************************************************************************/
     async function fetchText(src) {
         const res = await fetch(src);
 
@@ -56,13 +58,13 @@ const Frontend = (() => {
     }
 
 
-    /**
+    /********************************************************************************
      * Fetches the text content at a fragment source URL.
      * Returns null if the request fails, so the caller can use the inline fallback.
      *
      * @param {string} src - The resolved URL to fetch (main src or fallback).
      * @returns {Promise<string|null>}
-     */
+     ********************************************************************************/
     async function fetchFragment(src) {
         try {
             return await fetchText(src);
@@ -73,16 +75,16 @@ const Frontend = (() => {
     }
 
 
-    /**
+    /********************************************************************************
      * Parses an HTML string into a detached DocumentFragment.
      * Uses a <template> element so content is parsed without a surrounding
-     * context: table rows, cells, list items, and options are all preserved,
-     * where a <div> wrapper would drop table parts. Nothing is rendered,
-     * loaded, or executed until the nodes are inserted into the page.
+     * context: table rows, cells, list items, and options are all preserved.
+     * Nothing is rendered, loaded, or executed until the nodes are inserted
+     * into the page.
      *
      * @param {string} html - The HTML to parse.
      * @returns {DocumentFragment} The parsed nodes.
-     */
+     ********************************************************************************/
     function parseHTML(html) {
         const t = document.createElement("template");
         t.innerHTML = html;
@@ -238,7 +240,6 @@ const Frontend = (() => {
     }
 
 
-
     async function loadComponents(root) {
         const components = Array.from(root.querySelectorAll("component"));
 
@@ -309,8 +310,6 @@ const Frontend = (() => {
             
                 // --- Parse & replace ---
                 const newNodes = await parseFragment(substituted, currentFrag);
-
-
 
                 // --- Fire event ---
                 dispatch("fragment:loaded", { id: currentFrag.id, src: targetSrc, nodes: newNodes });
@@ -750,9 +749,9 @@ const Frontend = (() => {
             if (t[k])
                 owner.setAttribute(`${base}-${k}`, "");
 
-    }
+    }s
     
-    function applyDataBindingToOwner(owner, binding)
+    function buildDataBinding(owner, binding)
     {
         const key = binding.getAttribute("key");
         const target = binding.getAttribute("target");
@@ -788,11 +787,6 @@ const Frontend = (() => {
         return params;
     }
 
-    /***************************************************************************************
-     *
-     * Trigger Compilation Utility Functions
-     * 
-     ***************************************************************************************/
 
     /**
      * Determines which source URL to load for a fragment context.
@@ -920,29 +914,17 @@ const Frontend = (() => {
      * Parses HTML into DOM nodes and replaces the original fragment.
      * Returns an array of the new nodes.
      */
-    async function parseFragment(html, fragData) {
-
+    async function parseFragment(html, fragData)
+    {
         const wrapper = document.createElement("template");
         wrapper.innerHTML = html;
         const root = wrapper.content;
 
         removeDuplicateScripts(root);
-        await loadLinkedPacks(root, "behaviors", "behavior[id]", registerBehaviorElement);
-        await loadBehaviorsElements(root);
-        await loadLinkedPacks(root, "templates", "template[id]", tmpl => moveTemplateToGlobal(tmpl, getTemplatesContainer()));
-        await loadTemplates(root);
+        await processNode(root);
 
-        //await buildTriggers(root);
-        await compileChildren(root, 'trigger', applyTrigger)
-        //await buildDataBindings(root);
-        await compileChildren(root, 'data-binding', applyDataBindingToOwner)
-        await loadCodeElements(root);         // --- Parse and Load code src attributes
-
-        const newNodes = Array.from(root.childNodes);
-
-        // --- swap the DOM fragment with the new nodes
-        fragData.el.replaceWith(...newNodes);
-
+        const newNodes = Array.from(root.childNodes);   
+        fragData.el.replaceWith(...newNodes);           // --- swap the DOM fragment with the new nodes
 
         // --- Run scripts & links ---
         newNodes.forEach(n => {
@@ -1048,7 +1030,8 @@ const Frontend = (() => {
 
         for (const script of wrapper.querySelectorAll("script[id]")) {
             const id = script.id;
-            if (!id) continue;
+            if (!id)
+                continue;
 
             if (seen.has(id) || document.querySelector(`script#${CSS.escape(id)}`)) {
                 log.debug(`Skipped duplicate script "${id}"`);
@@ -1059,8 +1042,6 @@ const Frontend = (() => {
             seen.add(id);
         }
     }
-
-
 
     /***************************************************************************************
      *
@@ -1156,6 +1137,7 @@ const Frontend = (() => {
         log.log("Markdown processor registered.");
     }
 
+
     /**
      * Converts Markdown text to HTML using the registered processor.
      * If none is set, returns escaped plain text.
@@ -1170,7 +1152,6 @@ const Frontend = (() => {
             return `<pre>${text}</pre>`;
         }
     }
-
 
 
     /***************************************************************************************
@@ -1250,35 +1231,16 @@ const Frontend = (() => {
     }
 
 
-    /**
-     * Retrieves a value from the global state.
-     */
-    function getData(path)
-    {
-        return path.split(".").reduce((o, k) => (o != null ? o[k] : undefined), state);
-    }
+    /* Retrieves a value from the global state. */
+    function getData(path) { return path.split(".").reduce((o, k) => (o != null ? o[k] : undefined), state); }
 
+    function patchData(path, patch) { commitData(path, mergeDataValues(getData(path), patch)); }
 
-    function patchData(path, patch) {
-        commitData(path, mergeDataValues(getData(path), patch));
-    }
+    /* Removes a value from the global state at a given path. */
+    function removeData(path) { commitData(path, undefined); }
 
-    /**
-     * Removes a value from the global state at a given path.
-     * Fires data:removed and updates bound elements.
-     */
-    function removeData(path) {
-        commitData(path, undefined);
-    }
-
-    /**
-     * Sets a value in the global state and updates bound elements.
-     * Path can be nested ("user.name").
-     */
-    function setData(path, value) {
-        commitData(path, mergeDataValues(undefined, value));
-    }
-
+    /* Sets a value in the global state and updates bound elements. */
+    function setData(path, value) { commitData(path, mergeDataValues(undefined, value)); }
 
     /**
      * Resets the entire state object to empty.
@@ -1350,7 +1312,6 @@ const Frontend = (() => {
             }
 
         }
-
 
         const parts = path.split(".");
 
