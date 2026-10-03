@@ -749,7 +749,7 @@ const Frontend = (() => {
             if (t[k])
                 owner.setAttribute(`${base}-${k}`, "");
 
-    }s
+    }
     
     function buildDataBinding(owner, binding)
     {
