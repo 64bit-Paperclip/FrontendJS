@@ -477,26 +477,6 @@ const Frontend = (() => {
         });
     }
 
-        
-
-        // --- Param substitution ---
-        const substituted = substituteParams(html, params || {});
-
-        // --- Parse substituted HTML into DOM nodes ---
-        const wrapper = document.createElement("template");
-        wrapper.innerHTML = substituted;
-
-        const newNodes = Array.from(wrapper.content.childNodes);
-
-        // --- Insert into destination ---
-        if (clearParent) {
-            destination.innerHTML = "";
-        }
-
-        destination.append(...newNodes);
-
-    }
-
 
 
     /***************************************************************************************
