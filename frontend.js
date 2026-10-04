@@ -450,18 +450,16 @@ const Frontend = (() => {
             return;
         }
 
+        
+
         // --- Param substitution ---
         const substituted = substituteParams(html, params || {});
 
-        // --- Parse into a temporary detached container and process like a node ---
+        // --- Parse substituted HTML into DOM nodes ---
         const wrapper = document.createElement("template");
         wrapper.innerHTML = substituted;
-        const root = wrapper.content;
 
-        removeDuplicateScripts(root);
-        await processNode(root);
-
-        const newNodes = Array.from(root.childNodes);
+        const newNodes = Array.from(wrapper.content.childNodes);
 
         // --- Insert into destination ---
         if (clearParent) {
@@ -470,11 +468,6 @@ const Frontend = (() => {
 
         destination.append(...newNodes);
 
-        // --- Run scripts & links after insertion ---
-        newNodes.forEach(n => {
-            handleFragmentLinks(n);
-            runScripts(n);
-        });
     }
 
 
