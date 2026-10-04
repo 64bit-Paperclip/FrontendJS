@@ -453,6 +453,35 @@ const Frontend = (() => {
         // --- Param substitution ---
         const substituted = substituteParams(html, params || {});
 
+        // --- Parse into a temporary detached container and process like a node ---
+        const wrapper = document.createElement("template");
+        wrapper.innerHTML = substituted;
+        const root = wrapper.content;
+
+        removeDuplicateScripts(root);
+        await processNode(root);
+
+        const newNodes = Array.from(root.childNodes);
+
+        // --- Insert into destination ---
+        if (clearParent) {
+            destination.innerHTML = "";
+        }
+
+        destination.append(...newNodes);
+
+        // --- Run scripts & links after insertion ---
+        newNodes.forEach(n => {
+            handleFragmentLinks(n);
+            runScripts(n);
+        });
+    }
+
+        
+
+        // --- Param substitution ---
+        const substituted = substituteParams(html, params || {});
+
         // --- Parse substituted HTML into DOM nodes ---
         const wrapper = document.createElement("template");
         wrapper.innerHTML = substituted;
