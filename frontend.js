@@ -2,7 +2,7 @@
 
 const Frontend = (() => {
 
-    const DATA_EVENT_TYPES = Object.freeze({
+    const DATA_EVENT_TYPE = Object.freeze({
         CHANGED: 'changed',
         ADDED: 'added',
         DELETED: 'deleted'
