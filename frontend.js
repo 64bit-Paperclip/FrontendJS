@@ -1,4 +1,14 @@
+
+
 const Frontend = (() => {
+
+    const DATA_EVENT_TYPES = Object.freeze({
+        CHANGED: 'changed',
+        ADDED: 'added',
+        DELETED: 'deleted'
+    });
+
+
 
     const state         = {};
     const dataListeners = new Set();
