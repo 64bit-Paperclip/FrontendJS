@@ -1490,6 +1490,7 @@ const Frontend = (() => {
     // Public API
     // ---------------------------
     return {
+        DATA_EVENT_TYPE,
         initialize,
         on,
         onData,
