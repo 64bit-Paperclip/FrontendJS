@@ -431,15 +431,12 @@ const Frontend = (() => {
      * @param {boolean} [clearParent=false] - If true, clears destination before inserting.
      */
     async function loadComponent(destinationID, templateID, params = {}, clearParent = false) {
-
-        // --- Find destination ---
         const destination = document.getElementById(destinationID);
         if (!destination) {
             log.warn(`loadComponent: destination element not found: "${destinationID}"`);
             return;
         }
 
-        // --- Find template ---
         const templateContainer = document.querySelector("templates#templates");
         if (!templateContainer) {
             log.error("loadComponent: global templates container not found.");
@@ -452,7 +449,6 @@ const Frontend = (() => {
             return;
         }
 
-        // --- Clone the template content ---
         const html = tmpl.innerHTML;
         if (!html.trim()) {
             log.warn(`loadComponent: template "${templateID}" is empty.`);
@@ -460,24 +456,43 @@ const Frontend = (() => {
             return;
         }
 
-        
-
-        // --- Param substitution ---
         const substituted = substituteParams(html, params || {});
 
-        // --- Parse substituted HTML into DOM nodes ---
         const wrapper = document.createElement("template");
         wrapper.innerHTML = substituted;
+        const root = wrapper.content;
 
-        const newNodes = Array.from(wrapper.content.childNodes);
+        removeDuplicateScripts(root);
+        await processNode(root);
 
-        // --- Insert into destination ---
+        const newNodes = Array.from(root.childNodes);
+
         if (clearParent) {
             destination.innerHTML = "";
         }
 
         destination.append(...newNodes);
 
+        newNodes.forEach(n => {
+            handleFragmentLinks(n);
+            runScripts(n);
+        });
+
+        for (const n of newNodes) {
+            if (n.nodeType !== Node.ELEMENT_NODE) continue;
+
+            if (n.matches("fragment[src]")) {
+                await loadFragment(n);
+                continue;
+            }
+
+            if (n.querySelectorAll) {
+                for (const f of n.querySelectorAll("fragment[src]")) {
+                    if (!f.isConnected || f.closest("code")) continue;
+                    await loadFragment(f);
+                }
+            }
+        }
     }
 
 
