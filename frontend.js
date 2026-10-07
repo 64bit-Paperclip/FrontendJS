@@ -1269,6 +1269,19 @@ const Frontend = (() => {
     /* Sets a value in the global state and updates bound elements. */
     function setData(path, value) { commitData(path, mergeDataValues(undefined, value)); }
 
+    function hasData(path) {
+        const keys = path.split(".");
+        let cur = state;
+
+        for (const k of keys) {
+            if (!isContainer(cur) || !(k in cur))
+                return false;
+            cur = cur[k];
+        }
+
+        return true;
+    }
+
     /**
      * Resets the entire state object to empty.
      * Fires data:removed for each cleared key.
@@ -1509,6 +1522,7 @@ const Frontend = (() => {
         initialize,
         on,
         onData,
+        hasData,
         setData,
         getData,
         loadComponent,
