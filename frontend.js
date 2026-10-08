@@ -425,15 +425,22 @@ const Frontend = (() => {
     /**
      * Instantiates a template into a destination element.
      *
-     * @param {string} destinationID - The id of the destination element.
+     * @param {string|HTMLElement} destination - The CSS selector string or the DOM element itself.
      * @param {string} templateID - The id of the <template> to instantiate.
      * @param {Object} [params={}] - Optional key/value params for substitution.
      * @param {boolean} [clearParent=false] - If true, clears destination before inserting.
      */
-    async function loadComponent(destinationID, templateID, params = {}, clearParent = false) {
-        const destination = document.getElementById(destinationID);
-        if (!destination) {
-            log.warn(`loadComponent: destination element not found: "${destinationID}"`);
+    async function loadComponent(destination, templateID, params = {}, clearParent = false) {
+
+        let destinationEl;
+        if (typeof destination === 'string') {
+            destinationEl = document.querySelector(destination);
+        } else if (destination instanceof Element) {
+            destinationEl = destination;
+        }
+
+        if (!destinationEl) {
+            log.warn(`loadComponent: destination element not found: "${destination}"`);
             return;
         }
 
@@ -452,7 +459,7 @@ const Frontend = (() => {
         const html = tmpl.innerHTML;
         if (!html.trim()) {
             log.warn(`loadComponent: template "${templateID}" is empty.`);
-            destination.innerHTML = "";
+            destinationEl.innerHTML = "";
             return;
         }
 
@@ -468,10 +475,10 @@ const Frontend = (() => {
         const newNodes = Array.from(root.childNodes);
 
         if (clearParent) {
-            destination.innerHTML = "";
+            destinationEl.innerHTML = "";
         }
 
-        destination.append(...newNodes);
+        destinationEl.append(...newNodes);
 
         newNodes.forEach(n => {
             handleFragmentLinks(n);
